@@ -1,6 +1,6 @@
 {
     "latest_version": "2.0.0",
-    "change_log": "Re-worked the menu for clearance,\nAdded launch options\nAdded auto open CS2\nAdded advanced options button to hide clutter\nAdded bulk account importing\nAdded last played timestamp,\nRe-worked the update pop-up\nreduced terminal spam\nThe string textbox is cleared automatically\nDouble clicking in an account now opens a the account,\nOld accounts are now backup/restored\nonce you load another account automatically \n(DO NOT USE 'CHANGE ACCOUNT' BUTTON)",
+    "change_log": "Re-worked the menu for clearance, Added launch options, Added auto open CS2 on login, Added advanced options button to hide clutter, Added bulk account importing, Added last played timestamp, Re-worked the update pop-up, Reduced terminal spam, The string textbox is cleared automatically, Double clicking the account will open the Steam Profile in browser, Added Export to Clipboard button.,\nTo be added:,\nExisting accounts automatic backup with restore button",
     "download_url": "https://github.com/bet3rd/warestore/releases/download/Releases/WareStore.1.1.7.exe",
-    "force_update_below_version": "1.1.6"
+    "force_update_below_version": "1.1.7"
 }
