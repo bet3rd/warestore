@@ -1,6 +1,6 @@
 {
-    "latest_version": "2.0.1",
-    "change_log": ", Softwares that require Steam restart should work now, Fixed eyA token expire time, (hopefully) Fixed multiple windows users issue.",
+    "latest_version": "2.1",
+    "change_log": ", (Hopefully again) Fixed the icon error whatever",
     "download_url": "https://github.com/bet3rd/warestore/releases/download/2.0.1/WareStore.2.0.1.exe",
     "force_update_below_version": "1.1.7"
 }
