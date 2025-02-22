@@ -1,6 +1,6 @@
 {
-    "latest_version": "2.2",
-    "change_log": ", Removed useless features, Remote Play gets automatically disabled on login, Status set to Invisible on login",
+    "latest_version": "2.1",
+    "change_log": ", rollbacked to 2.1 due to issues with login",
     "download_url": "https://github.com/bet3rd/warestore/releases/download/2.2/WareStore.2.2.exe",
-    "force_update_below_version": "2.1"
+    "force_update_below_version": "1.1.7"
 }
