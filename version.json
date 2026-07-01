@@ -1,6 +1,6 @@
 {
     "latest_version": "3",
     "change_log": ", New tool dropped, go check it out",
-    "download_url": "https://github.com/bet3rd/warestore/releases/download/3.0/WareStore",
+    "download_url": "https://github.com/bet3rd/warestore/releases/download/3.0/WareStore.3.0.exe",
     "force_update_below_version": "2.1"
 }
