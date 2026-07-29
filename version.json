@@ -1,6 +1,6 @@
 {
-    "latest_version": "3.0",
-    "change_log": ", New tool dropped, go check it out",
-    "download_url": "https://github.com/bet3rd/warestore/releases/download/3.0/WareStore.3.0.exe",
+    "latest_version": "3.1",
+    "change_log": "- **New installer** \u2014 WareStore now installs like proper software: into Program Files, with a Start Menu shortcut, clean uninstall, and in-place updates. No more loose executable to manage.\n- **Optional HWID spoofer** \u2014 no longer bundled. Enable it any time from Settings and it downloads on demand, keeping the base app smaller and friendlier to antivirus.\n- **Smaller download** \u2014 trimmed unused Qt components.\n- **Redesigned Settings tab** \u2014 tidier layout with fixed spacing and alignment throughout.\n- **Fixed a crash** when switching to accounts with non-Latin characters in their name.\n- **Fixed** the \"failed to remove temporary directory\" warning that could appear on exit.",
+    "download_url": "https://github.com/bet3rd/warestore/releases/latest/download/WareStoreSetup.exe",
     "force_update_below_version": "2.1"
 }
