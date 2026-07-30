@@ -83,10 +83,25 @@ WareStore is part of a small family of Steam tooling:
 - **Website:** [warestore.cc](https://warestore.cc)
 - **GitLab mirror:** [gitlab.com/bet3rd](https://gitlab.com/bet3rd) — all projects are mirrored there in case GitHub ever acts up.
 
+## Building from source
+
+WareStore is a Python / PyQt5 app managed with [uv](https://docs.astral.sh/uv/):
+
+```bat
+git clone https://github.com/bet3rd/warestore.git
+cd warestore
+uv sync
+uv run warestore
+```
+
+Build the Windows installer with `scripts\build.bat` (requires Inno Setup 6). See
+**[CONTRIBUTING.md](CONTRIBUTING.md)** for the full developer guide, project
+layout, and how to submit changes.
+
 ## License
 
 WareStore is licensed under the **[GNU General Public License v3.0 or later](LICENSE)** — you're free to use, study, share, and modify it, and any distributed fork must stay open under the same license.
 
-The full source is being cleaned up for public release; the installer is available now, with the code to follow.
+Contributions are welcome under the same license — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 © 2026 bet3rd

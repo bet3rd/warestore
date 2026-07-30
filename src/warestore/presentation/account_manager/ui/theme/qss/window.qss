@@ -1,0 +1,92 @@
+QPushButton#win-min {
+    background: transparent;
+    border: none;
+    color: #555555;
+    font-size: 15px;
+    border-radius: 6px;
+    min-height: 0;
+    padding: 0;
+}
+QPushButton#win-min:hover  { background: #2a2a2a; color: #cccccc; }
+QPushButton#win-close {
+    background: transparent;
+    border: none;
+    color: #555555;
+    font-size: 13px;
+    border-radius: 6px;
+    min-height: 0;
+    padding: 0;
+}
+QPushButton#win-close:hover { background: #cc2222; color: #ffffff; }
+QPushButton#gear {
+    background: transparent;
+    border: none;
+    color: #4a4a4a;
+    font-family: "Segoe UI Symbol";
+    font-size: 15px;
+    border-radius: 5px;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+}
+QPushButton#gear:hover  { background: #242424; color: #909090; }
+QPushButton#gear:pressed { background: #1a1a1a; }
+QCheckBox {
+    color: #c0c0c0;
+    background: transparent;
+    font-size: 12px;
+    spacing: 8px;
+}
+QCheckBox::indicator {
+    width: 15px;
+    height: 15px;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    background: #1e1e1e;
+}
+QCheckBox::indicator:hover   { border: 1px solid #606060; }
+QCheckBox::indicator:checked { background: #880808; border: 1px solid #aa1010; }
+QCheckBox:disabled { color: #444444; }
+QPlainTextEdit {
+    background: #1a1a1a;
+    color: #c8c8c8;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px;
+    padding: 6px 8px;
+    selection-background-color: #880808;
+}
+QPlainTextEdit:focus { border: 1px solid #880808; }
+QPlainTextEdit#log {
+    background: #161616;
+    color: #888888;
+    font-family: Consolas, monospace;
+    font-size: 10px;
+    border: 1px solid #252525;
+    border-radius: 6px;
+}
+QMenu {
+    background: #1e1e1e;
+    border: 1px solid #2e2e2e;
+    border-radius: 6px;
+    padding: 4px 0;
+    color: #e0e0e0;
+    font-size: 12px;
+}
+QMenu::item          { padding: 7px 20px 7px 14px; border-radius: 4px; margin: 1px 4px; }
+QMenu::item:selected { background: #2e2e2e; color: #ffffff; }
+QMenu::item:disabled { color: #555555; }
+QMenu::separator     { height: 1px; background: #2e2e2e; margin: 3px 8px; }
+QScrollBar:vertical {
+    background: transparent;
+    width: 5px;
+    margin: 0;
+    border-radius: 2px;
+}
+QScrollBar::handle:vertical       { background: #363636; border-radius: 2px; min-height: 20px; }
+QScrollBar::handle:vertical:hover { background: #505050; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical,  QScrollBar::sub-page:vertical {
+    height: 0; background: none;
+}

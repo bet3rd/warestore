@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# Build output
+dist/
+build/
+nuitka-build/
+# Ignore PyInstaller-generated specs, but keep the hand-written build spec.
+*.spec
+!warestore.spec
+
+# Local runtime data / secrets — never source
+tokens.txt
+injector.exe
+profiles.json
+hardware_pool.json
+
+# Env / logs / misc
+.env
+.env.*
+*.log
+.python-version.bak

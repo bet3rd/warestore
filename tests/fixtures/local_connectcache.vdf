@@ -1,0 +1,17 @@
+"MachineUserConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"ConnectCache"
+				{
+					"abc1231"		"deadbeef"
+					"def4561"		"cafebabe"
+				}
+			}
+		}
+	}
+}

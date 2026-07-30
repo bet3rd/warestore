@@ -1,0 +1,23 @@
+"users"
+{
+	"76561198000000001"
+	{
+		"AccountName"		"alice"
+		"PersonaName"		"Alice"
+		"TokenGUID"		"{aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee}"
+		"RememberPassword"		"1"
+		"AllowAutoLogin"		"1"
+		"MostRecent"		"1"
+		"Timestamp"		"1700000000"
+	}
+	"76561198000000002"
+	{
+		"AccountName"		"bob"
+		"PersonaName"		"Bob"
+		"TokenGUID"		"{ffffffff-1111-2222-3333-444444444444}"
+		"RememberPassword"		"1"
+		"AllowAutoLogin"		"1"
+		"MostRecent"		"0"
+		"Timestamp"		"1700000001"
+	}
+}

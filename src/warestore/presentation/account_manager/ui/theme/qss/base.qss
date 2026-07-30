@@ -1,0 +1,121 @@
+QMainWindow, QWidget#central {
+    background: transparent;
+}
+QWidget {
+    font-family: "Segoe UI";
+}
+QLabel {
+    color: #e0e0e0;
+    background: transparent;
+}
+QLabel#title {
+    color: #f0f0f0;
+    font-size: 17px;
+    font-weight: bold;
+}
+QLabel#section {
+    color: #505050;
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+QLabel#info {
+    color: #686868;
+    font-size: 11px;
+    padding: 1px 2px;
+    min-height: 18px;
+}
+QLabel#token_err {
+    color: #aa5544;
+    font-size: 11px;
+    padding: 0 2px;
+}
+QLabel#warning {
+    color: #c97820;
+    font-size: 11px;
+    padding: 1px 2px;
+    min-height: 18px;
+}
+QLabel#detail {
+    color: #9a9a9a;
+    font-size: 11px;
+    padding: 0 2px;
+    min-height: 16px;
+}
+QFrame#footer {
+    background: transparent;
+    border: none;
+}
+QFrame#selectionbar {
+    background: transparent;
+    border: none;
+}
+QFrame#statusbar {
+    background: transparent;
+    border: none;
+}
+QLineEdit {
+    background: #1e1e1e;
+    color: #e0e0e0;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    selection-background-color: #880808;
+}
+QLineEdit:focus {
+    border: 1px solid #880808;
+    background: #202020;
+}
+QLineEdit:hover {
+    border: 1px solid #383838;
+}
+QPushButton {
+    background: #880808;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 0;
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 32px;
+}
+QPushButton:hover    { background: #a00a0a; }
+QPushButton:pressed  { background: #660606; }
+QPushButton:disabled { background: #3a1616; color: #6a3030; }
+QPushButton#secondary {
+    background: #1e1e1e;
+    color: #909090;
+    border: 1px solid #303030;
+    font-weight: normal;
+}
+QPushButton#secondary:hover  { background: #262626; border: 1px solid #424242; color: #c0c0c0; }
+QPushButton#secondary:pressed { background: #181818; }
+QScrollArea, QScrollArea > QWidget, QScrollArea > QWidget > QWidget {
+    background: transparent;
+    border: none;
+}
+QFrame#separator, QFrame#section_sep {
+    background: #2a2a2a;
+    border: none;
+    max-height: 1px;
+    min-height: 1px;
+}
+QFrame#login_strip {
+    background: transparent;
+    border: none;
+}
+QLineEdit#search {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 20px;
+}
+QLineEdit#token {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 20px;
+}
+QPushButton#compact {
+    min-height: 0;
+    padding: 0;
+    font-size: 11px;
+}
