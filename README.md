@@ -33,7 +33,7 @@ It was built to make managing that many accounts feel effortless, and it's free 
 
 ## Download & Install
 
-**[⬇ Download `WareStoreSetup.exe`](https://github.com/bet3rd/warestore/releases/latest/download/WareStoreSetup.exe)** — or grab it from the [Releases page](https://github.com/bet3rd/warestore/releases/latest).
+Grab it from the [Releases page](https://github.com/bet3rd/warestore/releases/latest).
 
 Run the installer and you're set. It installs like normal software:
 
