@@ -9,8 +9,6 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-blue)](https://github.com/bet3rd/warestore/releases/latest)
 [![Website](https://img.shields.io/badge/website-warestore.cc-crimson)](https://warestore.cc)
 
-### [⬇ Download the latest installer](https://github.com/bet3rd/warestore/releases/latest/download/WareStoreSetup.exe)
-
 </div>
 
 ---
