@@ -1,6 +1,6 @@
 <div align="center">
 
-# WareStore — Steam Account Manager
+# WareStore Account Manager
 
 **Switch between dozens of Steam accounts in one click — no passwords, no Steam Guard, nothing of yours deleted.**
 
@@ -15,14 +15,14 @@
 
 ---
 
-WareStore is a Windows desktop app for managing a large collection of Steam accounts through their refresh tokens — the "rented accounts" you juggle by the dozen. It signs any account in **instantly**, straight from a saved token: no password, no Steam Guard, no waiting. Every account is **added** to Steam alongside the others — WareStore never wipes what's already there — and it keeps the whole roster organized, labeled, and readable at a glance.
+**WareStore Account Manager** is a Windows desktop app for managing a large collection of Steam accounts through their refresh tokens — the "rented accounts" you juggle by the dozen. It signs any account in **instantly**, straight from a saved token: no password, no Steam Guard, no waiting. Every account is **added** to Steam alongside the others — it never wipes what's already there — and it keeps the whole roster organized, labeled, and readable at a glance.
 
 It was built to make managing that many accounts feel effortless, and it's free for everyone.
 
 ## Features
 
-- **⚡ Instant account switching** — sign in from a saved refresh token in one click (double-click a card or `Alt`+`Enter`). WareStore closes Steam, sets the account, and relaunches — no credentials typed, and no other account touched.
-- **📥 Add accounts your way** — paste a single token, bulk-import a whole list (one per line), or let WareStore **auto-extract** tokens for accounts already signed into Steam on the machine.
+- **⚡ Instant account switching** — sign in from a saved refresh token in one click (double-click a card or `Alt`+`Enter`). It closes Steam, sets the account, and relaunches — no credentials typed, and no other account touched.
+- **📥 Add accounts your way** — paste a single token, bulk-import a whole list (one per line), or let it **auto-extract** tokens for accounts already signed into Steam on the machine.
 - **🗂️ Organize the roster** — color tags, a searchable grid, and a filter menu (by color, untagged, no-cooldown, no-bans) to find any account fast.
 - **🔎 Status at a glance** — every card shows the account's **level**, **online/away/in-game status**, **VAC / game / trade ban** flags, and a live **cooldown** bar, with a rich tooltip for the details.
 - **⏱️ Cooldown tracking** — mark competitive cooldowns with presets or a custom duration, watch the countdown tick down on the card, and get a tray notification the moment one clears.
@@ -59,22 +59,22 @@ Run the installer and you're set. It installs like normal software:
 
 ## Privacy & safety
 
-WareStore is built to keep your accounts on **your** machine.
+WareStore Account Manager is built to keep your accounts on **your** machine.
 
 - **No telemetry, no token upload.** Your refresh tokens never leave your PC — they're only written into Steam's own encrypted store and your local, encrypted vault. The only network calls the app makes are read-only: checking for updates, and (optionally, with your API key) fetching public profile status, bans, and levels from Steam's own API.
 - **Encrypted at rest.** Tokens are protected with Windows DPAPI by default, or AES-256-GCM when you set a master password.
-- **It manages Steam directly.** To switch accounts, WareStore reads and writes Steam's login files (`loginusers.vdf`, `config.vdf`, the `ConnectCache`) and closes/relaunches Steam. That's how a password-less switch works — and it's all local.
+- **It manages Steam directly.** To switch accounts, it reads and writes Steam's login files (`loginusers.vdf`, `config.vdf`, the `ConnectCache`) and closes/relaunches Steam. That's how a password-less switch works — and it's all local.
 - **Irreversible actions are gated.** Cleanup and deletions always show you exactly what they'll do first.
 
 ## Updates
 
-WareStore checks for new versions on launch and shows you the changelog when one's available. Choosing to update opens the latest installer, which upgrades your install in place and keeps all your data.
+WareStore Account Manager checks for new versions on launch and shows you the changelog when one's available. Choosing to update opens the latest installer, which upgrades your install in place and keeps all your data.
 
 ## The WareStore toolkit
 
-WareStore is part of a small family of Steam tooling:
+The Account Manager is the flagship of the **WareStore** family — a few more Steam tools round it out:
 
-- **[Steam-JWT-Tool](https://github.com/bet3rd/Steam-JWT-Tool)** — an open-source, login-only tool that runs on the same login logic as the full app. Add a token, sign in, done.
+- **[Steam-JWT-Tool](https://github.com/bet3rd/Steam-JWT-Tool)** — an open-source, login-only tool that runs on the same login logic as WareStore Account Manager. Add a token, sign in, done.
 - **[Cache Extract Tool](https://bet3rd.github.io/cache-extract)** ([source](https://github.com/bet3rd/cache-extract)) — bought an account and only got an `.exe` you can't verify? Upload it and get the token back. Everything is processed locally in your browser.
 - **[steam_hwid_spoofer](https://github.com/bet3rd/steam_hwid_spoofer)** — the standalone HWID spoofer. Build it yourself or grab a prebuilt binary from the [Releases](https://github.com/bet3rd/steam_hwid_spoofer/releases) page.
 
@@ -85,7 +85,7 @@ WareStore is part of a small family of Steam tooling:
 
 ## Building from source
 
-WareStore is a Python / PyQt5 app managed with [uv](https://docs.astral.sh/uv/):
+WareStore Account Manager is a Python / PyQt5 app managed with [uv](https://docs.astral.sh/uv/):
 
 ```bat
 git clone https://github.com/bet3rd/warestore.git
@@ -100,7 +100,7 @@ layout, and how to submit changes.
 
 ## License
 
-WareStore is licensed under the **[GNU General Public License v3.0 or later](LICENSE)** — you're free to use, study, share, and modify it, and any distributed fork must stay open under the same license.
+WareStore Account Manager is licensed under the **[GNU General Public License v3.0 or later](LICENSE)** — you're free to use, study, share, and modify it, and any distributed fork must stay open under the same license.
 
 Contributions are welcome under the same license — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
