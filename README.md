@@ -83,8 +83,10 @@ WareStore is part of a small family of Steam tooling:
 - **Website:** [warestore.cc](https://warestore.cc)
 - **GitLab mirror:** [gitlab.com/bet3rd](https://gitlab.com/bet3rd) — all projects are mirrored there in case GitHub ever acts up.
 
-## Source & license
+## License
 
-WareStore is currently distributed as a closed-source installer. A cleaned-up source release is planned — until then, you're welcome to inspect the packaged app.
+WareStore is licensed under the **[GNU General Public License v3.0](LICENSE)** — you're free to use, study, share, and modify it, and any distributed fork must stay open under the same license.
 
-© 2026 bet3rd. All rights reserved.
+The full source is being cleaned up for public release; the installer is available now, with the code to follow.
+
+© 2026 bet3rd
