@@ -85,7 +85,7 @@ WareStore is part of a small family of Steam tooling:
 
 ## License
 
-WareStore is licensed under the **[GNU General Public License v3.0](LICENSE)** — you're free to use, study, share, and modify it, and any distributed fork must stay open under the same license.
+WareStore is licensed under the **[GNU General Public License v3.0 or later](LICENSE)** — you're free to use, study, share, and modify it, and any distributed fork must stay open under the same license.
 
 The full source is being cleaned up for public release; the installer is available now, with the code to follow.
 
