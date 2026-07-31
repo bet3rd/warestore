@@ -1,6 +1,6 @@
 {
     "latest_version": "3.2.1",
-    "change_log": "- Bump version to 3.2.1\n- ci(release): add manual-trigger Release workflow\n- feat(accounts): refresh + persist persona name and avatar\n- feat(cs2): apply source launch options on every switch; remove unused dev.json\n- feat(cs2): seed launch options + fix launch-options localconfig path\n- Update README.md\n- Update README.md\n- docs: name the product 'WareStore Account Manager' (WareStore is the brand)\n- ci: mirror main + tags to GitLab on push\n- Add WareStore source (GPL-3.0)\n- docs: license is GPL-3.0-or-later\n- docs: license is GPL-3.0\n- docs: add GPL-3.0 license\n- docs: add project README\n- release: v3.2",
+    "change_log": "**New features**\n- **Accounts** \u2014 persona names and avatars now refresh from Steam and are cached locally, so every card shows the current name and picture the moment you open WareStore, instead of only updating after you log into an account.\n- **CS2** \u2014 your source account's launch options are now copied to new accounts automatically on every switch.\n\n**Fixes**\n- **CS2** \u2014 fixed a path bug that made Steam silently ignore launch options set by WareStore; they now apply in-game as expected.",
     "download_url": "https://github.com/bet3rd/warestore/releases/latest/download/WareStoreSetup.exe",
     "force_update_below_version": "3"
 }
