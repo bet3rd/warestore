@@ -106,6 +106,7 @@ class AccountManagerController:
         if not steam_dir:
             return False
         if self._facade.cs2_config.copy_config(steam_dir, source, target_steam_id):
+            self._facade.steam_login.copy_cs2_launch_options(steam_dir, source, target_steam_id)
             self._facade.metadata.set_cs2_seeded(target_steam_id, True)
             return True
         return False
@@ -124,6 +125,7 @@ class AccountManagerController:
         if not steam_dir:
             return False
         if self._facade.cs2_config.copy_config(steam_dir, source, target_steam_id):
+            self._facade.steam_login.copy_cs2_launch_options(steam_dir, source, target_steam_id)
             self._facade.metadata.set_cs2_seeded(target_steam_id, True)
             return True
         return False

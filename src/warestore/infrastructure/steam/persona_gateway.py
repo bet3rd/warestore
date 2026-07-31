@@ -73,27 +73,63 @@ class PersonaGateway:
         except Exception as exc:
             logger.warning(f"Remote Play write failed: {exc}")
 
-    def set_cs2_launch_options(self, steam_dir: str, steam_id64: str, options: str) -> None:
+    # CS2 launch options live under a deeply-nested key in localconfig.vdf:
+    # UserLocalConfigStore → Software → Valve → Steam → apps → 730 →
+    # LaunchOptions. This is exactly where Steam itself reads/writes them; a
+    # shallower path (e.g. UserLocalConfigStore → apps → 730) is silently ignored.
+    _LAUNCH_OPTS_PATH = ("Software", "Valve", "Steam", "apps", "730")
+
+    def _localconfig_path(self, steam_id64: str, steam_dir: str) -> str:
         steamid32 = int(steam_id64) - STEAMID64_BASE
-        localconfig = os.path.join(
-            steam_dir,
-            "userdata",
-            str(steamid32),
-            "config",
-            "localconfig.vdf",
+        return os.path.join(
+            steam_dir, "userdata", str(steamid32), "config", "localconfig.vdf"
         )
+
+    def get_cs2_launch_options(self, steam_dir: str, steam_id64: str) -> str:
+        localconfig = self._localconfig_path(steam_id64, steam_dir)
         if not os.path.exists(localconfig):
-            return
+            return ""
         try:
             with open(localconfig, encoding="utf-8", errors="replace") as f:
-                data = vdf.loads(f.read())
-            (
-                data.setdefault("UserLocalConfigStore", {})
-                .setdefault("apps", {})
-                .setdefault("730", {})
-            )["LaunchOptions"] = options
+                node = vdf.loads(f.read()).get("UserLocalConfigStore", {})
+        except Exception:
+            return ""
+        for key in self._LAUNCH_OPTS_PATH:
+            node = node.get(key, {}) if isinstance(node, dict) else {}
+        return node.get("LaunchOptions", "") if isinstance(node, dict) else ""
+
+    def set_cs2_launch_options(self, steam_dir: str, steam_id64: str, options: str) -> None:
+        localconfig = self._localconfig_path(steam_id64, steam_dir)
+        os.makedirs(os.path.dirname(localconfig), exist_ok=True)
+        data: dict = {}
+        if os.path.exists(localconfig):
+            try:
+                with open(localconfig, encoding="utf-8", errors="replace") as f:
+                    data = vdf.loads(f.read())
+            except Exception as exc:
+                logger.warning(f"localconfig.vdf unreadable, CS2 launch options skipped: {exc}")
+                return
+        node = data.setdefault("UserLocalConfigStore", {})
+        for key in self._LAUNCH_OPTS_PATH:
+            node = node.setdefault(key, {})
+        node["LaunchOptions"] = options
+        try:
             with open(localconfig, "w", encoding="utf-8") as f:
                 f.write(vdf.dumps(data, pretty=True))
             logger.info(f'CS2 launch options set: "{options}"')
         except Exception as exc:
-            logger.warning(f"CS2 launch options failed: {exc}")
+            logger.warning(f"CS2 launch options write failed: {exc}")
+
+    def copy_launch_options(self, steam_dir: str, src_sid: str, dst_sid: str) -> bool:
+        """Copy the source account's CS2 launch options to the target.
+
+        No-op (False) when the accounts match or the source has none set.
+        """
+        if src_sid == dst_sid:
+            return False
+        options = self.get_cs2_launch_options(steam_dir, src_sid)
+        if not options:
+            return False
+        self.set_cs2_launch_options(steam_dir, dst_sid, options)
+        logger.info(f"CS2 launch options copied → {dst_sid}")
+        return True

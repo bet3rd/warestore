@@ -93,7 +93,16 @@ class SwitchWorker(QThread):
             logger.info("Account added — leaving Steam closed (add-only mode).")
             return
         launch_cs2 = self.open_cs2 and self.mode == "native"
-        if self.mode == "native" and self.open_cs2 and self.acc and steam_dir:
+        # Only apply the configured launch options when the user actually set
+        # some — an empty field must not overwrite options seeded from the CS2
+        # source account (or ones the account already had).
+        if (
+            self.mode == "native"
+            and self.open_cs2
+            and self.acc
+            and steam_dir
+            and self.cs2_options.strip()
+        ):
             self._ctrl.set_cs2_launch_options(
                 steam_dir, self.acc["steamid"], self.cs2_options
             )

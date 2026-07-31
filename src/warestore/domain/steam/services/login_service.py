@@ -370,6 +370,9 @@ class SteamLoginService:
     def set_cs2_launch_options(self, steam_dir: str, steam_id: str, options: str) -> None:
         self._persona.set_cs2_launch_options(steam_dir, steam_id, options)
 
+    def copy_cs2_launch_options(self, steam_dir: str, src_sid: str, dst_sid: str) -> bool:
+        return self._persona.copy_launch_options(steam_dir, src_sid, dst_sid)
+
     def disable_cs2_workshop(self, steam_dir: str, steam_id64: str) -> int:
         """Stop CS2 (730) from downloading this account's Workshop items.
 

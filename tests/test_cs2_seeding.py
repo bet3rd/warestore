@@ -43,7 +43,8 @@ def _make_controller(tmp_path, source_sid):
         metadata=_FakeMetadata(),
         cs2_config=cs2,
         steam_login=SimpleNamespace(
-            process=SimpleNamespace(install_path=lambda: str(tmp_path))
+            process=SimpleNamespace(install_path=lambda: str(tmp_path)),
+            copy_cs2_launch_options=lambda steam_dir, src, dst: False,
         ),
     )
     return AccountManagerController(facade=facade), facade
