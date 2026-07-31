@@ -80,16 +80,15 @@ jobs:
         run: |
           set -eo pipefail
           PREV=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
+          # A hand-written changelog wins; otherwise auto-generate one scoped to
+          # THIS release (commits since the previous tag), grouped by type and
+          # filtered to user-facing changes -- see scripts/gen_changelog.py.
           if [ -n "$INPUT_CHANGELOG" ]; then
-            BODY="$INPUT_CHANGELOG"
-          elif [ -n "$PREV" ]; then
-            BODY=$(git log "$PREV..HEAD" --no-merges --pretty=format:'- %s')
+            printf '%s\n' "$INPUT_CHANGELOG" > version_changelog.txt
           else
-            BODY=$(git log --no-merges --pretty=format:'- %s')
+            python scripts/gen_changelog.py > version_changelog.txt
           fi
-          [ -n "$BODY" ] || BODY="- Maintenance release"
-          # version.json change_log = plain bullets; release notes also get a diff link.
-          printf '%s\n' "$BODY" > version_changelog.txt
+          # version.json change_log = the notes above; the release page also gets a diff link.
           cp version_changelog.txt release_notes.txt
           if [ -n "$PREV" ]; then
             printf '\n**Full changelog:** https://github.com/%s/compare/%s...%s\n' "$REPO" "$PREV" "$TAG" >> release_notes.txt

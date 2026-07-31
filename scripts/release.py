@@ -90,7 +90,8 @@ def current_manifest(repo: str) -> tuple[dict, str | None]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Publish a WareStore release + version.json.")
-    ap.add_argument("-c", "--changelog", required=True, help="change_log text for version.json")
+    ap.add_argument("-c", "--changelog", default=None,
+                    help="change_log text (default: auto-generate from commits since the last tag)")
     ap.add_argument("--repo", default=DEFAULT_REPO, help=f"target repo (default {DEFAULT_REPO})")
     ap.add_argument("--force-below", default=None,
                     help="force_update_below_version (default: keep existing)")
@@ -101,6 +102,15 @@ def main() -> None:
     version = app_version()
     tag = f"v{version}"
     print(f"[*] App version (source of truth): {version}  ->  tag {tag}")
+
+    # A hand-written changelog wins; otherwise auto-generate one scoped to this
+    # release, grouped by type and filtered to user-facing changes.
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from gen_changelog import generate  # noqa: E402
+
+    changelog = args.changelog or generate()
+    print("[*] Changelog:")
+    print("\n".join("      " + ln for ln in changelog.splitlines()))
 
     # 1. Build if needed ------------------------------------------------------
     if not args.no_build and not args.dry_run:
@@ -116,7 +126,7 @@ def main() -> None:
     force_below = args.force_below or manifest.get("force_update_below_version", version)
     new_manifest = {
         "latest_version": version,
-        "change_log": args.changelog,
+        "change_log": changelog,
         "download_url": download_url(args.repo),
         "force_update_below_version": force_below,
     }
@@ -138,11 +148,11 @@ def main() -> None:
         # Refresh the notes too, so the release page matches version.json's
         # change_log on a re-release (upload --clobber only touches the asset).
         run(["gh", "release", "edit", tag, "--repo", args.repo,
-             "--notes", args.changelog])
+             "--notes", changelog])
     else:
         run(["gh", "release", "create", tag, str(ASSET_PATH),
              "--repo", args.repo, "--title", f"WareStore {version}",
-             "--notes", args.changelog])
+             "--notes", changelog])
 
     # 4. Commit version.json --------------------------------------------------
     print("[*] Updating version.json...")
