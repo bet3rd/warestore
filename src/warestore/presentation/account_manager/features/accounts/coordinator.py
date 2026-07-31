@@ -252,6 +252,20 @@ class AccountCoordinator:
             )
             card.set_ban_info(status.get("ban"))
             card.set_level(status.get("level"))
+            if status.get("persona"):
+                card.set_persona(status["persona"])
+            if status.get("avatar_path"):
+                card.set_avatar_from_file(status["avatar_path"])
+
+        # Cache the fresh persona names + avatar hashes so the next launch shows
+        # them immediately (one batched write).
+        profiles = {
+            sid: {"persona": s.get("persona", ""), "avatar_hash": s.get("avatar_hash", "")}
+            for sid, s in statuses.items()
+            if s.get("persona") or s.get("avatar_hash")
+        }
+        if profiles:
+            self._ctrl.persist_profiles(profiles)
 
         # Bans arrive after the initial render, so the "no bans" filter must be
         # re-evaluated once they're known.

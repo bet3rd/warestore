@@ -67,5 +67,12 @@ class SteamSummariesGateway:
                 # to online.
                 persona = int(player.get("personastate", 0))
                 state = persona if persona <= 4 else 1
-            out[sid] = {"state": state, "game": game}
+            out[sid] = {
+                "state": state,
+                "game": game,
+                # Fresh display name + avatar, straight from the same response.
+                "persona": player.get("personaname", ""),
+                "avatar": player.get("avatarfull", ""),
+                "avatar_hash": player.get("avatarhash", ""),
+            }
         return out

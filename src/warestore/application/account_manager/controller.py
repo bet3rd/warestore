@@ -267,6 +267,14 @@ class AccountManagerController:
     def get_metadata(self, steam_id: str) -> AccountRecord:
         return self._facade.metadata.get(steam_id)
 
+    def all_metadata(self) -> dict:
+        """All stored account records in a single read."""
+        return self._facade.metadata.all()
+
+    def persist_profiles(self, profiles: dict) -> None:
+        """Cache fetched persona names + avatar hashes for next-launch display."""
+        self._facade.metadata.set_profiles(profiles)
+
     def set_last_played(self, steam_id: str, played: bool = True) -> None:
         self._facade.metadata.set_last_played(steam_id, played)
 

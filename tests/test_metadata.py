@@ -33,3 +33,33 @@ def test_color_independent_of_cooldown(tmp_path):
     rec = repo.get("111")
     assert rec.color == "#cc4444"
     assert rec.cooldown_duration == 3600  # color write preserved cooldown
+
+
+def test_set_profiles_persists_and_preserves(tmp_path):
+    repo = AccountMetadataRepository(path=str(tmp_path / "meta.json"))
+    repo.set_color("1", "#cc4444")  # pre-existing data must survive the batch write
+    repo.set_profiles(
+        {
+            "1": {"persona": "Neo", "avatar_hash": "abc123"},
+            "2": {"persona": "Trinity", "avatar_hash": "def456"},
+        }
+    )
+    r1 = repo.get("1")
+    assert (r1.persona, r1.avatar_hash, r1.color) == ("Neo", "abc123", "#cc4444")
+    assert repo.get("2").persona == "Trinity"
+
+
+def test_set_profiles_ignores_empty_values(tmp_path):
+    repo = AccountMetadataRepository(path=str(tmp_path / "meta.json"))
+    repo.set_profiles({"1": {"persona": "Neo", "avatar_hash": "abc"}})
+    # a later fetch that returns no persona/hash must not wipe the cached ones
+    repo.set_profiles({"1": {"persona": "", "avatar_hash": ""}})
+    rec = repo.get("1")
+    assert (rec.persona, rec.avatar_hash) == ("Neo", "abc")
+
+
+def test_all_returns_records(tmp_path):
+    repo = AccountMetadataRepository(path=str(tmp_path / "meta.json"))
+    repo.set_profiles({"1": {"persona": "Neo", "avatar_hash": "abc"}})
+    allrecs = repo.all()
+    assert allrecs["1"].persona == "Neo"

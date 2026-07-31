@@ -18,6 +18,28 @@ class AccountMetadataRepository:
     def get(self, steam_id: str) -> AccountRecord:
         return AccountRecord.from_raw(self._load().get(steam_id, {}))
 
+    def all(self) -> dict[str, AccountRecord]:
+        """Every stored record in one read (avoids N file reads on load)."""
+        return {sid: AccountRecord.from_raw(raw) for sid, raw in self._load().items()}
+
+    def set_profiles(self, profiles: dict[str, dict]) -> None:
+        """Batch-store persona/avatar_hash for many accounts in a single write.
+
+        Each value is a dict with optional 'persona' and 'avatar_hash'. Empty
+        values are ignored so a failed fetch never wipes a good cached value.
+        """
+        if not profiles:
+            return
+        data = self._load()
+        for steam_id, prof in profiles.items():
+            record = AccountRecord.from_raw(data.get(steam_id, {}))
+            if prof.get("persona"):
+                record.persona = prof["persona"]
+            if prof.get("avatar_hash"):
+                record.avatar_hash = prof["avatar_hash"]
+            data[steam_id] = record.to_dict()
+        self._save(data)
+
     def set_last_played(self, steam_id: str, played: bool = True) -> None:
         data = self._load()
         record = AccountRecord.from_raw(data.get(steam_id, {}))

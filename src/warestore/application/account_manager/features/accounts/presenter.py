@@ -41,6 +41,18 @@ class AccountsPresenter:
             logger.error("No accounts found in loginusers.vdf.")
             return AccountLoadResult([], steam_dir, "")
 
+        # Prefer the persona name + avatar cached from the last status refresh, so
+        # cards show current info immediately instead of stale loginusers.vdf data.
+        meta = self._ctrl.all_metadata()
+        for acc in accounts:
+            record = meta.get(acc.get("steamid", ""))
+            if not record:
+                continue
+            if record.persona:
+                acc["persona_name"] = record.persona
+            if record.avatar_hash:
+                acc["avatar_hash"] = record.avatar_hash
+
         logger.info(f"Loaded {len(accounts)} account(s).")
         extracted = self._ctrl.extract_tokens_from_steam()
         if extracted:

@@ -10,11 +10,7 @@ from PyQt5.QtWidgets import QGridLayout, QWidget
 
 from warestore.application.account_manager.view_models import AccountCardViewState
 from warestore.presentation.account_manager.ui.accounts.account_card import AccountCard
-from warestore.presentation.account_manager.ui.avatars import (
-    AVATAR_SIZE,
-    load_avatar_pixmap,
-    make_placeholder_pixmap,
-)
+from warestore.presentation.account_manager.ui.avatars import avatar_for
 
 
 class AccountGrid(QWidget):
@@ -93,11 +89,7 @@ class AccountGrid(QWidget):
         self._primary_sid = None
 
         for i, acc in enumerate(accounts):
-            avatar = (
-                load_avatar_pixmap(steam_dir, acc["steamid"])
-                if steam_dir
-                else make_placeholder_pixmap(AVATAR_SIZE)
-            )
+            avatar = avatar_for(steam_dir, acc["steamid"], acc.get("avatar_hash", ""))
             card = AccountCard(acc, avatar)
             card.clicked.connect(self._on_click)
             card.double_clicked.connect(self.account_double_clicked)

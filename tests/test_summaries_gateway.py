@@ -40,10 +40,33 @@ def test_summaries_maps_state_and_game(monkeypatch):
         sum_module.urllib.request, "urlopen", lambda url, timeout=0: _FakeResp(payload)
     )
     out = SteamSummariesGateway().fetch_statuses("key", ["1", "2", "3", "4"])
-    assert out["1"] == {"state": 1, "game": ""}
-    assert out["2"] == {"state": 6, "game": "CS2"}
-    assert out["3"] == {"state": 3, "game": ""}
-    assert out["4"] == {"state": 1, "game": ""}
+    assert (out["1"]["state"], out["1"]["game"]) == (1, "")
+    assert (out["2"]["state"], out["2"]["game"]) == (6, "CS2")
+    assert out["3"]["state"] == 3
+    assert out["4"]["state"] == 1
+
+
+def test_summaries_captures_persona_and_avatar(monkeypatch):
+    payload = {
+        "response": {
+            "players": [
+                {
+                    "steamid": "1",
+                    "personastate": 1,
+                    "personaname": "CoolGuy",
+                    "avatarfull": "https://avatars.example/abc_full.jpg",
+                    "avatarhash": "abc",
+                }
+            ]
+        }
+    }
+    monkeypatch.setattr(
+        sum_module.urllib.request, "urlopen", lambda url, timeout=0: _FakeResp(payload)
+    )
+    out = SteamSummariesGateway().fetch_statuses("key", ["1"])
+    assert out["1"]["persona"] == "CoolGuy"
+    assert out["1"]["avatar"] == "https://avatars.example/abc_full.jpg"
+    assert out["1"]["avatar_hash"] == "abc"
 
 
 def test_summaries_http_error_marks_stale(monkeypatch):

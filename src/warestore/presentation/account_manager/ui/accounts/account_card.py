@@ -36,6 +36,7 @@ from warestore.presentation.account_manager.ui.accounts.account_card_menu import
 )
 from warestore.presentation.account_manager.ui.avatars import (
     AVATAR_SIZE,
+    circular_avatar_from_file,
     make_placeholder_pixmap,
 )
 
@@ -107,14 +108,14 @@ class AccountCard(QWidget):
         layout.setSpacing(6)
         layout.setAlignment(Qt.AlignCenter)
 
-        avatar_label = QLabel()
-        avatar_label.setFixedSize(AVATAR_SIZE, AVATAR_SIZE)
-        avatar_label.setAlignment(Qt.AlignCenter)
-        avatar_label.setStyleSheet("background: transparent; border: none;")
-        avatar_label.setPixmap(
+        self._avatar_label = QLabel()
+        self._avatar_label.setFixedSize(AVATAR_SIZE, AVATAR_SIZE)
+        self._avatar_label.setAlignment(Qt.AlignCenter)
+        self._avatar_label.setStyleSheet("background: transparent; border: none;")
+        self._avatar_label.setPixmap(
             avatar if (avatar and not avatar.isNull()) else make_placeholder_pixmap(AVATAR_SIZE)
         )
-        layout.addWidget(avatar_label, 0, Qt.AlignCenter)
+        layout.addWidget(self._avatar_label, 0, Qt.AlignCenter)
 
         display = acc.get("persona_name") or acc.get("account_name", "")
         name_font = QFont("Segoe UI", 9, QFont.Bold)
@@ -185,6 +186,21 @@ class AccountCard(QWidget):
         self._level = level
         self._refresh_tooltip()
         self.update()
+
+    def set_persona(self, name: str) -> None:
+        """Update the displayed persona name (e.g. from a status refresh)."""
+        if not name or name == self.acc.get("persona_name"):
+            return
+        self.acc["persona_name"] = name
+        metrics = QFontMetrics(self._nm_lbl.font())
+        self._nm_lbl.setText(metrics.elidedText(name, Qt.ElideRight, self.CARD_W - 10))
+        self._refresh_tooltip()
+
+    def set_avatar_from_file(self, path: str) -> None:
+        """Swap in a freshly-fetched avatar from a cached image file."""
+        pix = circular_avatar_from_file(path)
+        if pix is not None and not pix.isNull():
+            self._avatar_label.setPixmap(pix)
 
     def _ban_summary(self) -> str:
         b = self._ban

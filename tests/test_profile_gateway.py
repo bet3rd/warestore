@@ -53,7 +53,23 @@ def test_parse_online_status(monkeypatch):
 </profile>""",
     )
     status = SteamProfileGateway(throttle_seconds=0)._fetch_one("76561198000000001")
-    assert status == {"state": 1, "game": ""}
+    assert (status["state"], status["game"]) == (1, "")
+
+
+def test_parse_persona_and_avatar(monkeypatch):
+    _mock_xml(
+        monkeypatch,
+        b"""<profile>
+  <privacyState>public</privacyState>
+  <onlineState>online</onlineState>
+  <steamID>CoolGuy</steamID>
+  <avatarFull>https://avatars.example/abcdef_full.jpg</avatarFull>
+</profile>""",
+    )
+    status = SteamProfileGateway(throttle_seconds=0)._fetch_one("76561198000000001")
+    assert status["persona"] == "CoolGuy"
+    assert status["avatar"] == "https://avatars.example/abcdef_full.jpg"
+    assert status["avatar_hash"] == "abcdef"
 
 
 def test_parse_private_profile(monkeypatch):

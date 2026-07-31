@@ -40,6 +40,9 @@ class _FakeController:
 
         return AccountRecord(last_played=0)
 
+    def all_metadata(self):
+        return {}
+
     def format_last_played(self, timestamp: int):
         return "Never"
 
@@ -80,6 +83,19 @@ def test_load_accounts_success():
     assert len(result.accounts) == 1
     assert result.steam_dir == r"C:\Steam"
     assert "Loaded 1 account" in result.status_message
+
+
+def test_load_accounts_prefers_cached_persona_and_avatar():
+    from warestore.domain.accounts.models import AccountRecord
+
+    ctrl = _FakeController()
+    ctrl.all_metadata = lambda: {  # type: ignore[method-assign]
+        "76561198000000001": AccountRecord(persona="FreshName", avatar_hash="hash123")
+    }
+    result = AccountManagerPresenter(ctrl).load_accounts()
+    acc = result.accounts[0]
+    assert acc["persona_name"] == "FreshName"  # cached name wins over loginusers.vdf
+    assert acc["avatar_hash"] == "hash123"
 
 
 def test_relogin_entry_for():

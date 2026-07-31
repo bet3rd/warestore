@@ -4,6 +4,7 @@
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from warestore.application.account_manager.controller import AccountManagerController
+from warestore.presentation.account_manager.ui.avatars import ensure_avatar_downloaded
 
 
 class StatusFetchWorker(QThread):
@@ -30,4 +31,11 @@ class StatusFetchWorker(QThread):
             result.setdefault(sid, {})["ban"] = info
         for sid, level in self._ctrl.fetch_levels(self.steamids).items():
             result.setdefault(sid, {})["level"] = level
+        # Fetch fresh avatars off the UI thread; hash-keyed cache means an
+        # unchanged picture is downloaded at most once. The UI thread turns the
+        # cached file into a pixmap.
+        for info in result.values():
+            path = ensure_avatar_downloaded(info.get("avatar", ""), info.get("avatar_hash", ""))
+            if path:
+                info["avatar_path"] = path
         self.done.emit(result)

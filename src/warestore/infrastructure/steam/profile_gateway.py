@@ -47,8 +47,17 @@ class SteamProfileGateway:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 tree = ET.fromstring(resp.read())
 
+            # Persona name + avatar are public even on private profiles. The
+            # avatarhash is the URL's filename stem (…/<hash>_full.jpg).
+            avatar = tree.findtext("avatarFull", "") or ""
+            extra = {
+                "persona": tree.findtext("steamID", "") or "",
+                "avatar": avatar,
+                "avatar_hash": avatar.rsplit("/", 1)[-1].split("_", 1)[0] if avatar else "",
+            }
+
             if tree.findtext("privacyState", "") != "public":
-                return {"state": 0, "game": "", "private": True}
+                return {"state": 0, "game": "", "private": True, **extra}
 
             online_state = tree.findtext("onlineState", "offline")
             state_msg = tree.findtext("stateMessage", "")
@@ -64,7 +73,7 @@ class SteamProfileGateway:
             else:
                 state, game = 0, ""
 
-            return {"state": state, "game": game}
+            return {"state": state, "game": game, **extra}
         except urllib.error.HTTPError as exc:
             if exc.code == 429:
                 logger.debug(f"Rate limited — retry later ({steam_id})")
