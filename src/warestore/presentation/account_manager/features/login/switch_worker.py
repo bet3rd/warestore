@@ -89,6 +89,14 @@ class SwitchWorker(QThread):
                     self.status.emit("Copied CS2 config from source account.")
             except Exception as exc:  # never let seeding break a login
                 logger.warning(f"CS2 config seeding skipped: {exc}")
+            # Launch options track the source on EVERY switch (not seed-once), so
+            # every account keeps the source's launch options. Steam is closed
+            # here, so the value is in place before the next launch.
+            try:
+                if self._ctrl.apply_source_launch_options(self.acc["steamid"]):
+                    self.status.emit("Applied CS2 launch options from source.")
+            except Exception as exc:
+                logger.warning(f"CS2 launch options copy skipped: {exc}")
         if self.add_account_only:
             logger.info("Account added — leaving Steam closed (add-only mode).")
             return

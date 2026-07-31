@@ -105,8 +105,9 @@ class AccountManagerController:
         steam_dir = self.steam_install_path()
         if not steam_dir:
             return False
+        # Config folder is seeded once (launch options are handled separately, on
+        # every switch — see apply_source_launch_options).
         if self._facade.cs2_config.copy_config(steam_dir, source, target_steam_id):
-            self._facade.steam_login.copy_cs2_launch_options(steam_dir, source, target_steam_id)
             self._facade.metadata.set_cs2_seeded(target_steam_id, True)
             return True
         return False
@@ -129,6 +130,23 @@ class AccountManagerController:
             self._facade.metadata.set_cs2_seeded(target_steam_id, True)
             return True
         return False
+
+    def apply_source_launch_options(self, target_steam_id: str) -> bool:
+        """Copy the CS2 source account's launch options onto the target.
+
+        Not gated on the seed-once flag — this runs on every native switch so
+        every account tracks the source's launch options. No-op when no source
+        is set or the target is the source.
+        """
+        source = self.cs2_config_source()
+        if not source or source == target_steam_id:
+            return False
+        steam_dir = self.steam_install_path()
+        if not steam_dir:
+            return False
+        return self._facade.steam_login.copy_cs2_launch_options(
+            steam_dir, source, target_steam_id
+        )
 
     # --- leftover userdata cleanup ---
 

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from warestore.application.account_manager.controller import AccountManagerController
 from warestore.domain.accounts.models import AccountRecord
 from warestore.infrastructure.steam.cs2_config_gateway import Cs2ConfigGateway
+from warestore.infrastructure.steam.persona_gateway import PersonaGateway
 
 SRC_SID = "76561198000000001"
 DST_SID = "76561198000000002"
@@ -44,7 +45,7 @@ def _make_controller(tmp_path, source_sid):
         cs2_config=cs2,
         steam_login=SimpleNamespace(
             process=SimpleNamespace(install_path=lambda: str(tmp_path)),
-            copy_cs2_launch_options=lambda steam_dir, src, dst: False,
+            copy_cs2_launch_options=PersonaGateway().copy_launch_options,
         ),
     )
     return AccountManagerController(facade=facade), facade
@@ -109,3 +110,23 @@ def test_apply_skips_without_source(tmp_path):
     _seed_source(tmp_path)
     ctrl, _ = _make_controller(tmp_path, "")
     assert ctrl.apply_cs2_config(DST_SID) is False
+
+
+def test_apply_source_launch_options_copies_every_time(tmp_path):
+    # source has launch options; target starts with none
+    persona = PersonaGateway()
+    persona.set_cs2_launch_options(str(tmp_path), SRC_SID, "-novid -high")
+    ctrl, _ = _make_controller(tmp_path, SRC_SID)
+
+    # not gated on seeding — works even for an already-seeded / arbitrary target
+    assert ctrl.apply_source_launch_options(DST_SID) is True
+    assert persona.get_cs2_launch_options(str(tmp_path), DST_SID) == "-novid -high"
+    # and again on the next switch (no seed-once gate)
+    assert ctrl.apply_source_launch_options(DST_SID) is True
+
+
+def test_apply_source_launch_options_noop_without_source(tmp_path):
+    persona = PersonaGateway()
+    persona.set_cs2_launch_options(str(tmp_path), SRC_SID, "-novid")
+    ctrl, _ = _make_controller(tmp_path, "")
+    assert ctrl.apply_source_launch_options(DST_SID) is False
