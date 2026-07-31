@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Manual release: run tests, build WareStoreSetup.exe, publish a GitHub release
+# with a changelog, and bump version.json so the in-app updater serves it.
+#
+# Runs ONLY when triggered by hand (Actions tab -> Release -> Run workflow).
+# The app version in src/warestore/__init__.py is the single source of truth:
+# bump it, commit, then run this. The release tag is v<version>.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      changelog:
+        description: "Changelog (leave blank to auto-generate from commits since the last release)"
+        required: false
+        type: string
+      force_update_below:
+        description: "force_update_below_version (blank = keep current value)"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark as a pre-release"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags, needed for the changelog
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync --group dev
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Read app version
+        id: ver
+        shell: bash
+        run: |
+          set -eo pipefail
+          V=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/warestore/__init__.py)
+          [ -n "$V" ] || { echo "::error::could not read __version__ from src/warestore/__init__.py"; exit 1; }
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          echo "Releasing version $V (tag v$V)"
+
+      - name: Guard against re-releasing the same version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists. Bump __version__ in src/warestore/__init__.py first."
+            exit 1
+          fi
+
+      - name: Build changelog
+        id: log
+        shell: bash
+        env:
+          INPUT_CHANGELOG: ${{ inputs.changelog }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eo pipefail
+          PREV=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
+          if [ -n "$INPUT_CHANGELOG" ]; then
+            BODY="$INPUT_CHANGELOG"
+          elif [ -n "$PREV" ]; then
+            BODY=$(git log "$PREV..HEAD" --no-merges --pretty=format:'- %s')
+          else
+            BODY=$(git log --no-merges --pretty=format:'- %s')
+          fi
+          [ -n "$BODY" ] || BODY="- Maintenance release"
+          # version.json change_log = plain bullets; release notes also get a diff link.
+          printf '%s\n' "$BODY" > version_changelog.txt
+          cp version_changelog.txt release_notes.txt
+          if [ -n "$PREV" ]; then
+            printf '\n**Full changelog:** https://github.com/%s/compare/%s...%s\n' "$REPO" "$PREV" "$TAG" >> release_notes.txt
+          fi
+          echo "Previous release tag: ${PREV:-<none>}"
+          echo "----- release notes -----"
+          cat release_notes.txt
+
+      - name: Build installer
+        shell: cmd
+        run: scripts\build.bat
+
+      - name: Verify installer
+        shell: bash
+        run: |
+          set -eo pipefail
+          test -f dist/WareStoreSetup.exe || { echo "::error::dist/WareStoreSetup.exe was not produced"; exit 1; }
+          ls -l dist/WareStoreSetup.exe
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -eo pipefail
+          FLAGS=""
+          [ "$PRERELEASE" = "true" ] && FLAGS="--prerelease"
+          gh release create "$TAG" dist/WareStoreSetup.exe \
+            --title "WareStore $VERSION" \
+            --notes-file release_notes.txt \
+            $FLAGS
+
+      - name: Update version.json
+        shell: bash
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          FORCE_BELOW: ${{ inputs.force_update_below }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eo pipefail
+          python - <<'PY'
+          import json, os, pathlib
+          version = os.environ["VERSION"]
+          repo = os.environ["REPO"]
+          p = pathlib.Path("version.json")
+          old = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+          force = os.environ.get("FORCE_BELOW") or old.get("force_update_below_version", version)
+          manifest = {
+              "latest_version": version,
+              "change_log": pathlib.Path("version_changelog.txt").read_text(encoding="utf-8").strip(),
+              "download_url": f"https://github.com/{repo}/releases/latest/download/WareStoreSetup.exe",
+              "force_update_below_version": force,
+          }
+          p.write_text(json.dumps(manifest, indent=4) + "\n", encoding="utf-8")
+          print(p.read_text(encoding="utf-8"))
+          PY
+
+      - name: Commit version.json
+        shell: bash
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -eo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git diff --cached --quiet && { echo "version.json unchanged"; exit 0; }
+          git commit -m "release: v$VERSION"
+          git push
