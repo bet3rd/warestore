@@ -1,6 +1,6 @@
 {
-    "latest_version": "3.2.1",
-    "change_log": "**New features**\n- **Accounts** \u2014 persona names and avatars now refresh from Steam and are cached locally, so every card shows the current name and picture the moment you open WareStore, instead of only updating after you log into an account.\n- **CS2** \u2014 your source account's launch options are now copied to new accounts automatically on every switch.\n\n**Fixes**\n- **CS2** \u2014 fixed a path bug that made Steam silently ignore launch options set by WareStore; they now apply in-game as expected.",
+    "latest_version": "3.3.0",
+    "change_log": "**Bug fixes**\n- **release:** Proper 3.2.1 changelog in version.json",
     "download_url": "https://github.com/bet3rd/warestore/releases/latest/download/WareStoreSetup.exe",
     "force_update_below_version": "3"
 }
