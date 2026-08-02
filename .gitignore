@@ -1,30 +1,27 @@
+# Python
 .venv/
 __pycache__/
 .pytest_cache/
 *.py[cod]
 *$py.class
 *.egg-info/
+
+# Build output
 dist/
 build/
-# Ignore PyInstaller-generated specs, but keep the hand-written build spec
-# (build.bat / the release workflow build from it).
+nuitka-build/
+# Ignore PyInstaller-generated specs, but keep the hand-written build spec.
 *.spec
 !warestore.spec
-.python-version.bak
-*.log
-.env
-.env.*
-docs/
-# Per-machine HWID profile store (runtime data, not source)
+
+# Local runtime data / secrets — never source
+tokens.txt
+injector.exe
 profiles.json
-# Fetched at runtime from remote — not bundled in dist
 hardware_pool.json
 
-# Abandoned Rust rewrite (preserved on rust-rewrite branch)
-warestore-rs/
-
-# Plaintext token exports — never commit (live refresh tokens)
-tokens.txt
-
-# Spoofer injector — downloaded to %APPDATA% at runtime, never source
-injector.exe
+# Env / logs / misc
+.env
+.env.*
+*.log
+.python-version.bak
