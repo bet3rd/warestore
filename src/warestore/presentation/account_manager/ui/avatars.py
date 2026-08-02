@@ -7,8 +7,20 @@ import urllib.request
 
 from PyQt5.QtCore import Qt, QRect
 from PyQt5.QtGui import QBrush, QColor, QPainter, QPainterPath, QPixmap
+from PyQt5.QtWidgets import QApplication
 
 from warestore.config.settings import ACCOUNT_MANAGER_DATA_DIR
+
+
+def _dpr() -> float:
+    """Effective device-pixel ratio (interface scale); 1.0 if no app yet.
+
+    Avatars are rasters, so they render at this ratio (with setDevicePixelRatio)
+    to stay crisp when the interface is scaled — needs AA_UseHighDpiPixmaps.
+    """
+    app = QApplication.instance()
+    return float(app.devicePixelRatio()) if app is not None else 1.0
+
 
 try:
     from PIL import Image as PILImage
@@ -25,8 +37,9 @@ AVATAR_SIZE = 54
 _AVATAR_CACHE_DIR = os.path.join(ACCOUNT_MANAGER_DATA_DIR, "avatars")
 
 
-def _make_circular_pixmap(src: QPixmap, size: int) -> QPixmap:
-    result = QPixmap(size, size)
+def _make_circular_pixmap(src: QPixmap, size: int, dpr: float = 1.0) -> QPixmap:
+    result = QPixmap(max(1, round(size * dpr)), max(1, round(size * dpr)))
+    result.setDevicePixelRatio(dpr)  # paint in LOGICAL coords; crisp at scale
     result.fill(Qt.transparent)
     painter = QPainter(result)
     painter.setRenderHint(QPainter.Antialiasing)
@@ -38,8 +51,10 @@ def _make_circular_pixmap(src: QPixmap, size: int) -> QPixmap:
     return result
 
 
-def make_placeholder_pixmap(size: int) -> QPixmap:
-    pix = QPixmap(size, size)
+def make_placeholder_pixmap(size: int, dpr: float | None = None) -> QPixmap:
+    dpr = _dpr() if dpr is None else dpr
+    pix = QPixmap(max(1, round(size * dpr)), max(1, round(size * dpr)))
+    pix.setDevicePixelRatio(dpr)
     pix.fill(Qt.transparent)
     painter = QPainter(pix)
     painter.setRenderHint(QPainter.Antialiasing)
@@ -59,15 +74,18 @@ def make_placeholder_pixmap(size: int) -> QPixmap:
     return pix
 
 
-def circular_avatar_from_file(path: str) -> QPixmap | None:
+def circular_avatar_from_file(path: str, dpr: float | None = None) -> QPixmap | None:
     """Load an image file into a circular AVATAR_SIZE pixmap. None on failure.
 
-    Must run on the UI thread (creates a QPixmap).
+    Rendered at ``AVATAR_SIZE * dpr`` physical px (device-pixel ratio set) so the
+    avatar stays crisp when the interface is scaled. Must run on the UI thread.
     """
+    dpr = _dpr() if dpr is None else dpr
+    phys = max(1, round(AVATAR_SIZE * dpr))
     try:
         if PIL_AVAILABLE:
             img = PILImage.open(path).convert("RGBA").resize(
-                (AVATAR_SIZE, AVATAR_SIZE), PILImage.LANCZOS
+                (phys, phys), PILImage.LANCZOS
             )
             buf = io.BytesIO()
             img.save(buf, format="PNG")
@@ -78,43 +96,47 @@ def circular_avatar_from_file(path: str) -> QPixmap | None:
             src = QPixmap(path)
             if not src.isNull():
                 src = src.scaled(
-                    AVATAR_SIZE, AVATAR_SIZE, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
+                    phys, phys, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
                 )
         if not src.isNull():
-            return _make_circular_pixmap(src, AVATAR_SIZE)
+            return _make_circular_pixmap(src, AVATAR_SIZE, dpr)
     except Exception:
         pass
     return None
 
 
-def load_avatar_pixmap(steam_dir: str, steamid64: str) -> QPixmap:
+def load_avatar_pixmap(steam_dir: str, steamid64: str, dpr: float | None = None) -> QPixmap:
+    dpr = _dpr() if dpr is None else dpr
     if steam_dir and steamid64:
         for ext in ("png", "jpg"):
             path = os.path.join(steam_dir, "config", "avatarcache", f"{steamid64}.{ext}")
             if os.path.exists(path):
-                pix = circular_avatar_from_file(path)
+                pix = circular_avatar_from_file(path, dpr)
                 if pix is not None:
                     return pix
-    return make_placeholder_pixmap(AVATAR_SIZE)
+    return make_placeholder_pixmap(AVATAR_SIZE, dpr)
 
 
 def cached_avatar_path(avatar_hash: str) -> str:
     return os.path.join(_AVATAR_CACHE_DIR, f"{avatar_hash}.jpg")
 
 
-def avatar_for(steam_dir: str, steamid64: str, avatar_hash: str = "") -> QPixmap:
+def avatar_for(
+    steam_dir: str, steamid64: str, avatar_hash: str = "", dpr: float | None = None
+) -> QPixmap:
     """Best available avatar for a card at build time.
 
     Prefers the freshly-fetched avatar cached under `avatar_hash` (persisted from
     the last status refresh), then Steam's own avatarcache, then a placeholder.
     """
+    dpr = _dpr() if dpr is None else dpr
     if avatar_hash:
         path = cached_avatar_path(avatar_hash)
         if os.path.exists(path):
-            pix = circular_avatar_from_file(path)
+            pix = circular_avatar_from_file(path, dpr)
             if pix is not None:
                 return pix
-    return load_avatar_pixmap(steam_dir, steamid64)
+    return load_avatar_pixmap(steam_dir, steamid64, dpr)
 
 
 def ensure_avatar_downloaded(url: str, avatar_hash: str, timeout: int = 10) -> str | None:

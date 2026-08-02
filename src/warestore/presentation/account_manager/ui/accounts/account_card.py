@@ -708,8 +708,12 @@ class AccountCard(QWidget):
         overflow the card). A permanent cooldown shows as the ban dot, not here.
         Plain cards fall back to the muted login name so the line is never empty.
         """
+        # Raster badges are rendered at the device-pixel ratio so they stay crisp
+        # when the interface is scaled up; layout math below stays in LOGICAL px
+        # (physical size / dpr). Needs AA_UseHighDpiPixmaps (set in main.py).
+        dpr = self.devicePixelRatioF()
         has_prem = has_premier(self._premier_rating)
-        wing = wingman_emblem(self._wingman_rank, 16)
+        wing = wingman_emblem(self._wingman_rank, 16, dpr)
         cd_text = (
             format_cooldown_short(self._cooldown_expires)  # footer: hours-only above 1h
             if (self._cooldown_active and not self._permanent_cooldown())
@@ -718,11 +722,11 @@ class AccountCard(QWidget):
         if has_prem and wing is not None and cd_text:
             wing = None
 
-        items: list[tuple[str, object, int, int]] = []
+        items: list[tuple[str, object, float, float]] = []
         if has_prem:
-            items.append(("prem", None, self._premier_pixmap(20).width(), 20))
+            items.append(("prem", None, self._premier_pixmap(20, dpr).width() / dpr, 20))
         if wing is not None:
-            items.append(("wing", wing, wing.width(), wing.height()))
+            items.append(("wing", wing, wing.width() / dpr, wing.height() / dpr))
         if cd_text:
             tw = QFontMetrics(QFont("Segoe UI", 8, QFont.Bold)).width(cd_text)
             items.append(("cd", cd_text, 6 + 5 + tw, 12))
@@ -747,7 +751,7 @@ class AccountCard(QWidget):
         for kind, obj, w, h in items:
             y = cy - h / 2
             if kind == "prem":
-                self._draw_premier_badge(painter, x, cy - h / 2, h)
+                self._draw_premier_badge(painter, x, cy - h / 2, int(h), dpr)
             elif kind == "wing":
                 painter.drawPixmap(int(round(x)), int(round(y)), obj)
             else:  # cooldown dot + label
@@ -761,17 +765,19 @@ class AccountCard(QWidget):
                 )
             x += w + gap
 
-    def _premier_pixmap(self, h: int) -> QPixmap:
+    def _premier_pixmap(self, h: int, dpr: float = 1.0) -> QPixmap:
         """The CS2 Premier rating badge as a supersampled, cached QPixmap of
-        height ``h`` (its width varies with the rating)."""
-        key = (self._premier_rating, h)
+        height ``h`` LOGICAL px (its width varies with the rating). Rendered at
+        ``h * dpr`` physical px with the device-pixel ratio set, so it stays crisp
+        under interface scaling (QT_SCALE_FACTOR)."""
+        key = (self._premier_rating, h, round(dpr, 3))
         pm = _badge_cache.get(key)
         if pm is None:
-            pm = self._render_premier_pixmap(h)
+            pm = self._render_premier_pixmap(h, dpr)
             _badge_cache[key] = pm
         return pm
 
-    def _render_premier_pixmap(self, h: int) -> QPixmap:
+    def _render_premier_pixmap(self, h: int, dpr: float = 1.0) -> QPixmap:
         """Render the badge at ``h * _PREM_SS`` then downscale, so the bold
         Poppins number stays crisp: exact slanted accent bars (SVG) + a skewed
         (-10°) dark pill with an accent border + the tier-coloured number."""
@@ -815,10 +821,16 @@ class AccountCard(QWidget):
         p.restore()
         p.drawPixmap(0, 0, _premier_bars(accent, H))  # bars: path already slanted
         p.end()
-        return QPixmap.fromImage(img.scaledToHeight(h, Qt.SmoothTransformation))
+        pm = QPixmap.fromImage(
+            img.scaledToHeight(max(1, round(h * dpr)), Qt.SmoothTransformation)
+        )
+        pm.setDevicePixelRatio(dpr)
+        return pm
 
-    def _draw_premier_badge(self, painter: QPainter, x: float, y: float, h: int) -> None:
-        painter.drawPixmap(int(round(x)), int(round(y)), self._premier_pixmap(h))
+    def _draw_premier_badge(
+        self, painter: QPainter, x: float, y: float, h: int, dpr: float = 1.0
+    ) -> None:
+        painter.drawPixmap(int(round(x)), int(round(y)), self._premier_pixmap(h, dpr))
 
     def enterEvent(self, _event):
         self._hovering = True

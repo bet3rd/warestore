@@ -107,6 +107,16 @@ class SettingsCoordinator:
         if checked:
             self._reload_accounts()
 
+    def on_dpi_scale_change(self, _index: int) -> None:
+        scale = self._ui.cmb_dpi.currentData()
+        if scale is None:
+            return
+        self._settings["dpi_scale"] = int(scale)
+        self._ctrl.save_settings(self._settings)
+        # QT_SCALE_FACTOR is read once, at QApplication construction — a live
+        # change can't take effect, so prompt for a restart.
+        self._set_status(f"Interface scale set to {scale}%. Restart WareStore to apply.")
+
     def on_gcpd_check_toggle(self, checked: bool) -> None:
         # Takes effect on the next launch; nothing to do right now.
         self._settings["gcpd_check_on_launch"] = checked

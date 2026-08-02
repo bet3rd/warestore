@@ -7,6 +7,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -60,6 +61,7 @@ class SettingsPanel:
         self.cb_auto_remove_expired = QCheckBox("Remove expired tokens on refresh")
         self.cb_gcpd_on_launch = QCheckBox("Fetch CS2 ranks on launch")
         self.cb_exclude_capture = QCheckBox("Hide from screen capture (Discord, OBS)")
+        self.cmb_dpi = QComboBox()
         self.le_api_key = QLineEdit()
         self.lbl_api_status = QLabel("")
         self.btn_master = QPushButton()
@@ -244,6 +246,26 @@ class SettingsPanel:
 
         layout = _outer_layout
         layout.addWidget(startup_box)
+
+        self._add_separator(layout)
+
+        layout.addWidget(SectionLabel("Display"))
+        dpi_row = QHBoxLayout()
+        dpi_row.setContentsMargins(0, 0, 0, 0)
+        dpi_row.addWidget(QLabel("Interface scale"))
+        dpi_row.addStretch()
+        for pct in (100, 110, 125, 150, 200):
+            self.cmb_dpi.addItem(f"{pct}%", pct)
+        current_scale = int(self._settings.get("dpi_scale", 100) or 100)
+        idx = self.cmb_dpi.findData(current_scale)
+        self.cmb_dpi.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cmb_dpi.setFixedWidth(96)
+        dpi_row.addWidget(self.cmb_dpi)
+        layout.addLayout(dpi_row)
+        dpi_hint = QLabel("Scales the whole interface. Applies after restarting WareStore.")
+        dpi_hint.setObjectName("info")
+        dpi_hint.setWordWrap(True)
+        layout.addWidget(dpi_hint)
 
         self._add_separator(layout)
 

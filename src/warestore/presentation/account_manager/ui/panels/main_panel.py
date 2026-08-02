@@ -25,7 +25,7 @@ from warestore.presentation.account_manager.ui.section import SectionLabel
 
 def _rank_bars_icon() -> QIcon:
     """Ascending leaderboard bars — the 'fetch CS2 ranks for all accounts' button."""
-    ratio = 2
+    ratio = 2  # 2x supersample; AA_UseHighDpiPixmaps keeps it crisp when scaled
     size = 16
     pm = QPixmap(size * ratio, size * ratio)
     pm.fill(Qt.transparent)
@@ -43,7 +43,7 @@ def _rank_bars_icon() -> QIcon:
 
 def _funnel_icon(active: bool) -> QIcon:
     """Outline funnel for the filter button; filled accent when a filter is on."""
-    ratio = 2
+    ratio = 2  # 2x supersample; AA_UseHighDpiPixmaps keeps it crisp when scaled
     size = 16
     pm = QPixmap(size * ratio, size * ratio)
     pm.fill(Qt.transparent)

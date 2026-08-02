@@ -22,6 +22,7 @@ class SettingsRepository:
         "spoof_on_login": False,
         "cs2_config_source_sid": "",
         "exclude_from_capture": True,
+        "dpi_scale": 100,
         "steam_api_key": "",
         "vault_setup_done": False,
         "vault_mode": "dpapi",

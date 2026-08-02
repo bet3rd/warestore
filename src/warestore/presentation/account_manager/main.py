@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 bet3rd
 
+import os
 import sys
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont, QPalette
 from PyQt5.QtWidgets import QApplication
 
@@ -88,6 +90,18 @@ def _dark_palette() -> QPalette:
     return pal
 
 
+def _apply_interface_scale() -> None:
+    """Set QT_SCALE_FACTOR from the saved interface scale BEFORE QApplication is
+    created — Qt only reads it at construction, so a scale change needs a restart
+    (surfaced in Settings). 100 (%) is the default and applies no scaling."""
+    try:
+        scale = int(SettingsRepository().load().get("dpi_scale", 100))
+    except (Exception, ValueError, TypeError):  # noqa: BLE001 - never block startup
+        return
+    if scale > 0 and scale != 100:
+        os.environ["QT_SCALE_FACTOR"] = str(scale / 100)
+
+
 def main() -> None:
     _make_streams_unicode_safe()
     # Atomic single-instance gate — taken before any UI (including the vault
@@ -98,6 +112,12 @@ def main() -> None:
         activate_existing_instance()
         return
 
+    _apply_interface_scale()
+    # Qt5 ignores a pixmap's devicePixelRatio in QIcon/QPixmap/QLabel unless this
+    # is on (it's off by default) — without it every DPR-tagged icon/avatar is
+    # treated as 1x and upscaled (blurry) when the interface is scaled. Must be
+    # set before the QApplication is constructed.
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setPalette(_dark_palette())

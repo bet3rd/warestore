@@ -233,6 +233,7 @@ class MainWindow(QMainWindow):
         su.cb_gcpd_on_launch.toggled.connect(
             self._settings_coord.on_gcpd_check_toggle
         )
+        su.cmb_dpi.currentIndexChanged.connect(self._settings_coord.on_dpi_scale_change)
         su.cb_exclude_capture.toggled.connect(
             self._settings_coord.on_exclude_from_capture_toggle
         )

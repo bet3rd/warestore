@@ -63,14 +63,21 @@ def _load_source(path: Path) -> QPixmap:
     return pm
 
 
-def wingman_emblem(rank_id: int | None, height: int) -> QPixmap | None:
-    """Skill-group emblem scaled to `height`. None if unranked / out of range."""
+def wingman_emblem(rank_id: int | None, height: int, dpr: float = 1.0) -> QPixmap | None:
+    """Skill-group emblem sized to `height` LOGICAL px. None if unranked / out of range.
+
+    Rendered at ``height * dpr`` physical pixels with the device-pixel ratio set,
+    so it stays crisp when the interface is scaled up (QT_SCALE_FACTOR)."""
     if not has_wingman(rank_id):
         return None
-    key = ("w", rank_id, height)
+    key = ("w", rank_id, height, round(dpr, 3))
     pm = _pixmap_cache.get(key)
     if pm is None:
         src = _load_source(_ranks_dir() / "wingman" / f"{rank_id}.png")
-        pm = src.scaledToHeight(height, Qt.SmoothTransformation) if not src.isNull() else src
+        if src.isNull():
+            pm = src
+        else:
+            pm = src.scaledToHeight(max(1, round(height * dpr)), Qt.SmoothTransformation)
+            pm.setDevicePixelRatio(dpr)
         _pixmap_cache[key] = pm
     return None if pm.isNull() else pm
