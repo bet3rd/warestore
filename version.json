@@ -1,6 +1,6 @@
 {
     "latest_version": "3.3.0",
-    "change_log": "**Bug fixes**\n- **release:** Proper 3.2.1 changelog in version.json",
+    "change_log": "**New features**\n- **Accounts** \u2014 Redesigned account cards: a compact grid that shows each account's CS2 rank, competitive cooldown, and online status at a glance.\n- **CS2** \u2014 On-demand Premier and Wingman ranks plus competitive-cooldown status, fetched from Steam. The web session is minted in-process, so nothing extra is bundled or run in the background.\n- **CS2** \u2014 Fetch ranks for every account, for a multi-selection, or automatically on launch; fetches run one account at a time.\n- **CS2** \u2014 Premier and Wingman win counts now show in the card tooltip.\n\n**Bug fixes**\n- **Accounts** \u2014 Online and in-game statuses now use distinct colors.\n- **Accounts** \u2014 Expired tokens are removed reliably, and accounts left without a token are cleaned up.\n- **CS2** \u2014 Cooldown display is consistent: a coarse label on the card, full detail in the tooltip.",
     "download_url": "https://github.com/bet3rd/warestore/releases/latest/download/WareStoreSetup.exe",
     "force_update_below_version": "3"
 }
