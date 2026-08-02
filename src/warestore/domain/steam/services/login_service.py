@@ -4,7 +4,6 @@
 import logging
 import os
 import time
-from datetime import datetime
 
 from warestore.config.settings import STEAMID64_BASE
 from warestore.domain.accounts.ports import TokenStore
@@ -147,7 +146,7 @@ class SteamLoginService:
             pass
         return names
 
-    def extract_tokens_from_steam(self) -> int:
+    def extract_tokens_from_steam(self, skip_expired: bool = False) -> int:
         steam_dir = self._process.install_path()
         if not steam_dir:
             return 0
@@ -176,7 +175,7 @@ class SteamLoginService:
         saved = self._tokens.load_all()
         new_count = 0
         for acc in accounts:
-            if not acc.account_name or acc.steam_id in saved:
+            if not acc.account_name:
                 continue
             encrypted = connect_cache.get(self._crypto.crc32_key(acc.account_name), "")
             if not encrypted:
@@ -191,14 +190,35 @@ class SteamLoginService:
                 logger.warning(f"Token decrypt failed for {acc.account_name}: {exc}")
                 continue
             # ConnectCache can hold non-JWT junk; only keep refresh-token JWTs.
-            if self._jwt.looks_like_jwt(token):
-                saved[acc.steam_id] = {
-                    "username": acc.account_name,
-                    "token": token,
-                    "ts": time.time(),
-                }
-                new_count += 1
+            if not self._jwt.looks_like_jwt(token):
+                continue
+            if skip_expired and self._jwt.verify_expiry(token) < 0:
+                # "Remove expired on refresh" is on: don't (re-)extract a dead
+                # token. Otherwise it's re-added from ConnectCache on every
+                # refresh, right before the purge removes it again — so removal
+                # never sticks and the account's expired token keeps reappearing.
+                continue
+            existing = saved.get(acc.steam_id)
+            if existing is not None:
+                # Already have a token. A re-login rotates the refresh token, so
+                # ConnectCache may now hold a NEWER one — refresh ours to match.
+                # Compare `iat` (not just inequality) so a manually-imported fresh
+                # token can't be downgraded to an older cached one. Without this,
+                # a stale stored token is never replaced and eventually stops
+                # working (login/scrape both fail with AccessDenied).
+                if existing.get("token") == token:
+                    continue
+                if self._jwt.issued_at(token) <= self._jwt.issued_at(existing.get("token", "")):
+                    continue
+                logger.info(f"Refreshed token: {acc.account_name}")
+            else:
                 logger.info(f"Extracted token: {acc.account_name}")
+            saved[acc.steam_id] = {
+                "username": acc.account_name,
+                "token": token,
+                "ts": time.time(),
+            }
+            new_count += 1
         if new_count:
             self._tokens.save_all(saved)
         return new_count

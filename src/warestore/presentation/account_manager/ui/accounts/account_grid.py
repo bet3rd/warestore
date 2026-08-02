@@ -14,7 +14,7 @@ from warestore.presentation.account_manager.ui.avatars import avatar_for
 
 
 class AccountGrid(QWidget):
-    COLS = 5
+    COLS = 4
     GAP = 8
 
     @classmethod
@@ -38,6 +38,7 @@ class AccountGrid(QWidget):
     color_set_requested = pyqtSignal(object, str)
     cs2_source_set_requested = pyqtSignal(object)
     cs2_apply_requested = pyqtSignal(object)
+    cs2_rank_requested = pyqtSignal(object)
     hwid_reset_requested = pyqtSignal(object)
 
     def __init__(self, parent=None):
@@ -183,12 +184,6 @@ class AccountGrid(QWidget):
             if sid != self._primary_sid and sid in by_sid:
                 ordered.append(by_sid[sid])
         return ordered
-
-    def targets_for_action(self, acc: dict) -> list[dict]:
-        sid = acc.get("steamid", "")
-        if sid and sid in self._selected_sids:
-            return self.selected_accounts()
-        return [acc]
 
     def count_with_tokens(self, targets: list[dict]) -> int:
         by_sid = {card.acc.get("steamid", ""): card for card in self._cards}

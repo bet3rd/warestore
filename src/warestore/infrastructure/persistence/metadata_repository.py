@@ -62,6 +62,26 @@ class AccountMetadataRepository:
         data[steam_id] = record.to_dict()
         self._save(data)
 
+    def set_cs2_rank(
+        self,
+        steam_id: str,
+        premier_rating: int,
+        wingman_rank: int,
+        cooldown_expires: int,
+        premier_wins: int = -1,
+        wingman_wins: int = -1,
+    ) -> None:
+        """Cache the last on-demand CS2 rank fetch so it survives a reload."""
+        data = self._load()
+        record = AccountRecord.from_raw(data.get(steam_id, {}))
+        record.premier_rating = int(premier_rating)
+        record.premier_wins = int(premier_wins)
+        record.wingman_rank = int(wingman_rank)
+        record.wingman_wins = int(wingman_wins)
+        record.cs2_cooldown_expires = int(cooldown_expires)
+        data[steam_id] = record.to_dict()
+        self._save(data)
+
     def set_cs2_seeded(self, steam_id: str, seeded: bool = True) -> None:
         data = self._load()
         record = AccountRecord.from_raw(data.get(steam_id, {}))

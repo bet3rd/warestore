@@ -28,6 +28,16 @@ class SteamJwtService:
         except json.JSONDecodeError:
             return None
 
+    def issued_at(self, token: str) -> int:
+        """The token's `iat` (issued-at) unix time, or 0 if unparseable."""
+        payload = self._parse_payload(token)
+        if not payload:
+            return 0
+        try:
+            return int(json.loads(payload).get("iat", 0) or 0)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return 0
+
     def verify_expiry(self, refresh_token: str) -> int:
         try:
             decoded = jwt.decode(refresh_token, options={"verify_signature": False})

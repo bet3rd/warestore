@@ -34,9 +34,6 @@ class AccountManagerPresenter:
     def cooldown_label_for(self, steam_id: str) -> str:
         return self._cooldown.cooldown_label_for(steam_id)
 
-    def cooldown_progress_for(self, steam_id: str) -> float:
-        return self._cooldown.cooldown_progress_for(steam_id)
-
     def card_menu_for(self, acc: dict) -> AccountCardMenuState:
         return self._accounts.card_menu_for(
             acc,
@@ -53,7 +50,6 @@ class AccountManagerPresenter:
         return self._accounts.card_view_state_for(
             acc,
             cooldown_label=self._cooldown.cooldown_label_for(steam_id),
-            cooldown_progress=self._cooldown.cooldown_progress_for(steam_id),
             hwid_profile_names=hwid_profile_names,
         )
 

@@ -15,6 +15,7 @@ from warestore.infrastructure.steam.api_key_gateway import SteamApiKeyGateway
 from warestore.infrastructure.steam.bans_gateway import SteamBansGateway
 from warestore.infrastructure.steam.cs2_config_gateway import Cs2ConfigGateway
 from warestore.infrastructure.steam.crypto_gateway import SteamCryptoGateway
+from warestore.infrastructure.steam.gcpd_scrape_gateway import Cs2RankScrapeGateway
 from warestore.infrastructure.steam.level_gateway import SteamLevelGateway
 from warestore.infrastructure.steam.persona_gateway import PersonaGateway
 from warestore.infrastructure.steam.process_gateway import SteamProcessGateway
@@ -39,6 +40,7 @@ class AccountManagerFacade:
         self.summaries = SteamSummariesGateway()
         self.bans = SteamBansGateway()
         self.levels = SteamLevelGateway()
+        self.cs2_rank = Cs2RankScrapeGateway()
         self.api_key = SteamApiKeyGateway()
         self.cs2_config = Cs2ConfigGateway()
         self.userdata = UserdataGateway()

@@ -168,6 +168,10 @@ class MainWindow(QMainWindow):
         self._restore_window_position()
         self._accounts.load_accounts()
         QTimer.singleShot(300, self._settings_coord.check_updates)
+        if self._settings.get("gcpd_check_on_launch"):
+            # Defer so the grid renders first; then sweep every account's CS2
+            # rank sequentially (see AccountCoordinator.fetch_all_cs2_ranks).
+            QTimer.singleShot(800, self._accounts.fetch_all_cs2_ranks)
 
         self._tray = setup_tray(self)
         self._instance_server = InstanceServer(self)
@@ -205,7 +209,9 @@ class MainWindow(QMainWindow):
         ui.account_grid.color_set_requested.connect(self._accounts.set_color)
         ui.account_grid.cs2_source_set_requested.connect(self._accounts.set_cs2_source)
         ui.account_grid.cs2_apply_requested.connect(self._accounts.apply_cs2_source)
+        ui.account_grid.cs2_rank_requested.connect(self._accounts.fetch_cs2_ranks)
         ui.account_grid.hwid_reset_requested.connect(self._accounts.reset_hwid)
+        ui._btn_cs2_ranks.clicked.connect(self._accounts.fetch_all_cs2_ranks)
         ui._btn_refresh.clicked.connect(self._accounts.load_accounts)
         ui._btn_filter.clicked.connect(self._on_filter)
         ui._btn_settings.clicked.connect(self._settings_coord.toggle_panel)
@@ -223,6 +229,9 @@ class MainWindow(QMainWindow):
         su.cb_close_to_tray.toggled.connect(self._settings_coord.on_close_to_tray_toggle)
         su.cb_auto_remove_expired.toggled.connect(
             self._settings_coord.on_auto_remove_expired_toggle
+        )
+        su.cb_gcpd_on_launch.toggled.connect(
+            self._settings_coord.on_gcpd_check_toggle
         )
         su.cb_exclude_capture.toggled.connect(
             self._settings_coord.on_exclude_from_capture_toggle

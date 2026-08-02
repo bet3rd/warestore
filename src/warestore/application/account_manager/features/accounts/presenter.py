@@ -13,6 +13,7 @@ from warestore.application.account_manager.view_models import (
     AccountCardMenuState,
     AccountCardViewState,
 )
+from warestore.domain.auth.formatters import JWT_NO_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,6 @@ class AccountLoadResult:
     accounts: list[dict]
     steam_dir: str | None
     status_message: str
-    extracted_count: int = 0
     removed_expired: int = 0
 
 
@@ -52,6 +52,12 @@ class AccountsPresenter:
                 acc["persona_name"] = record.persona
             if record.avatar_hash:
                 acc["avatar_hash"] = record.avatar_hash
+            # Cached CS2 rank/cooldown so the card shows it again after a reload.
+            acc["premier_rating"] = record.premier_rating
+            acc["premier_wins"] = record.premier_wins
+            acc["wingman_rank"] = record.wingman_rank
+            acc["wingman_wins"] = record.wingman_wins
+            acc["cs2_cooldown_expires"] = record.cs2_cooldown_expires
 
         logger.info(f"Loaded {len(accounts)} account(s).")
         extracted = self._ctrl.extract_tokens_from_steam()
@@ -59,25 +65,38 @@ class AccountsPresenter:
             logger.info(f"Extracted {extracted} new token(s) from ConnectCache.")
 
         removed_expired = 0
+        removed_tokenless = 0
         if self._ctrl.load_settings().get("auto_remove_expired_tokens"):
             removed_expired = self._ctrl.purge_expired_tokens()
             if removed_expired:
                 logger.info(f"Removed {removed_expired} expired token(s) from AppData.")
+            # After the purge, also delete accounts left with no token from
+            # Steam's login list, then drop them from the displayed grid.
+            removed_tokenless = self._ctrl.purge_tokenless_accounts()
+            if removed_tokenless:
+                logger.info(
+                    f"Removed {removed_tokenless} tokenless account(s) from loginusers.vdf."
+                )
+                token_ids = set(self._ctrl.load_tokens().keys())
+                accounts = [a for a in accounts if a.get("steamid", "") in token_ids]
 
         status = f"Loaded {len(accounts)} account(s)."
         if removed_expired:
             status += f" Removed {removed_expired} expired token(s)."
+        if removed_tokenless:
+            status += f" Removed {removed_tokenless} tokenless account(s)."
         return AccountLoadResult(
             accounts,
             steam_dir,
             status,
-            extracted,
             removed_expired,
         )
 
     def jwt_expiry_for(self, steam_id: str) -> int:
         token = self._ctrl.saved_token_entry(steam_id).get("token", "")
-        return self._ctrl.verify_token_expiry(token) if token else -1
+        if not token:
+            return JWT_NO_TOKEN
+        return self._ctrl.verify_token_expiry(token)
 
     def card_menu_for(
         self,
@@ -107,7 +126,6 @@ class AccountsPresenter:
         acc: dict,
         *,
         cooldown_label: str,
-        cooldown_progress: float,
         hwid_profile_names: frozenset[str] = frozenset(),
     ) -> AccountCardViewState:
         steam_id = acc.get("steamid", "")
@@ -117,7 +135,7 @@ class AccountsPresenter:
         return AccountCardViewState(
             jwt_expires_in=self.jwt_expiry_for(steam_id),
             cooldown_label=cooldown_label,
-            cooldown_progress=cooldown_progress,
+            cooldown_expires=record.cooldown_until if record else 0,
             menu=self.card_menu_for(
                 acc,
                 has_cooldown=bool(cooldown_label),

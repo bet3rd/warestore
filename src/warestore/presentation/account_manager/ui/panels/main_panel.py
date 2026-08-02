@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 bet3rd
 
-from PyQt5.QtCore import QPointF, QSize, Qt
+from PyQt5.QtCore import QPointF, QRectF, QSize, Qt
 from PyQt5.QtGui import QBrush, QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
 from PyQt5.QtWidgets import (
     QApplication,
@@ -21,6 +21,24 @@ from PyQt5.QtWidgets import (
 from warestore.presentation.account_manager.ui.accounts import AccountGrid
 from warestore.presentation.account_manager.ui.chrome import HeaderBar
 from warestore.presentation.account_manager.ui.section import SectionLabel
+
+
+def _rank_bars_icon() -> QIcon:
+    """Ascending leaderboard bars — the 'fetch CS2 ranks for all accounts' button."""
+    ratio = 2
+    size = 16
+    pm = QPixmap(size * ratio, size * ratio)
+    pm.fill(Qt.transparent)
+    pm.setDevicePixelRatio(ratio)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QBrush(QColor("#8f8f8f")))
+    painter.drawRoundedRect(QRectF(2.5, 9.5, 3, 4), 1, 1)
+    painter.drawRoundedRect(QRectF(6.5, 6, 3, 7.5), 1, 1)
+    painter.drawRoundedRect(QRectF(10.5, 2.5, 3, 11), 1, 1)
+    painter.end()
+    return QIcon(pm)
 
 
 def _funnel_icon(active: bool) -> QIcon:
@@ -53,7 +71,7 @@ class MainPanel:
     FOOTER_PAD_V = 8
     LOG_PANEL_H = 72
     LAYOUT_SPACING = 6
-    MAX_VISIBLE_GRID_ROWS = 4
+    MAX_VISIBLE_GRID_ROWS = 2
     SCROLL_BOTTOM_PAD = 12
     GRID_SCROLL_INSET = 0
     GRID_SCROLL_BORDER = 0
@@ -203,6 +221,13 @@ class MainPanel:
         self._btn_log.setChecked(False)
         self._btn_log.setToolTip("Toggle log panel")
         status_layout.addWidget(self._btn_log)
+        self._btn_cs2_ranks = QPushButton()
+        self._btn_cs2_ranks.setObjectName("gear")
+        self._btn_cs2_ranks.setFixedSize(24, 24)
+        self._btn_cs2_ranks.setToolTip("Fetch CS2 ranks for all accounts")
+        self._btn_cs2_ranks.setIcon(_rank_bars_icon())
+        self._btn_cs2_ranks.setIconSize(QSize(16, 16))
+        status_layout.addWidget(self._btn_cs2_ranks)
         self._btn_refresh = QPushButton("↻")
         self._btn_refresh.setObjectName("gear")
         self._btn_refresh.setFixedSize(24, 24)

@@ -9,7 +9,6 @@ import logging
 import os
 import sys
 from collections.abc import Callable
-from pathlib import Path
 
 from warestore.application.account_manager.facade import AccountManagerFacade
 from warestore.domain.accounts.activity import format_last_played as format_last_played_label
@@ -54,7 +53,11 @@ class AccountManagerController:
         return self._facade.steam_login.list_accounts_from_steam()
 
     def extract_tokens_from_steam(self) -> int:
-        return self._facade.steam_login.extract_tokens_from_steam()
+        # When auto-remove-expired is on, don't re-extract dead tokens — otherwise
+        # ConnectCache re-adds them every refresh right before the purge.
+        return self._facade.steam_login.extract_tokens_from_steam(
+            skip_expired=self.load_settings().get("auto_remove_expired_tokens", False)
+        )
 
     def perform_token_login(self, raw_token: str, disable_remote_play: bool = False) -> bool:
         return self._facade.steam_login.perform_token_login(raw_token, disable_remote_play)
@@ -275,6 +278,25 @@ class AccountManagerController:
         """Cache fetched persona names + avatar hashes for next-launch display."""
         self._facade.metadata.set_profiles(profiles)
 
+    def persist_cs2_rank(
+        self,
+        steam_id: str,
+        premier_rating: int,
+        wingman_rank: int,
+        cooldown_expires: int,
+        premier_wins: int = -1,
+        wingman_wins: int = -1,
+    ) -> None:
+        """Cache an on-demand CS2 rank fetch so it survives a grid reload."""
+        self._facade.metadata.set_cs2_rank(
+            steam_id,
+            premier_rating,
+            wingman_rank,
+            cooldown_expires,
+            premier_wins,
+            wingman_wins,
+        )
+
     def set_last_played(self, steam_id: str, played: bool = True) -> None:
         self._facade.metadata.set_last_played(steam_id, played)
 
@@ -336,6 +358,29 @@ class AccountManagerController:
             self._facade.tokens.save_all(tokens)
         return removed
 
+    def purge_tokenless_accounts(self) -> int:
+        """Delete accounts that have no saved token from loginusers.vdf.
+
+        DESTRUCTIVE (rewrites Steam's login list), so fail-closed: if the token
+        store can't be read (locked vault / corruption) OR is empty, delete
+        NOTHING — a read failure must never make every account look tokenless and
+        wipe them all. Paired with auto-remove-expired.
+        """
+        try:
+            token_ids = set(self._facade.tokens.load_all_strict().keys())
+        except Exception:
+            return 0
+        if not token_ids:
+            # Empty/unknown store — refuse to mass-delete every account.
+            return 0
+        removed = 0
+        for acc in self.list_steam_accounts():
+            sid = acc.get("steamid", "")
+            if sid and sid not in token_ids and self.delete_account(sid):
+                self.delete_metadata(sid)
+                removed += 1
+        return removed
+
     # --- updates ---
 
     def check_updates(self) -> dict:
@@ -364,6 +409,29 @@ class AccountManagerController:
     def fetch_levels(self, steam_ids: list[str]) -> dict[str, int]:
         api_key = self.load_settings().get("steam_api_key", "")
         return self._facade.levels.fetch_levels(api_key, steam_ids)
+
+    def fetch_cs2_rank(self, steam_id: str, refresh_token: str) -> dict | None:
+        """On-demand CS2 Premier/Wingman rank + competitive cooldown for one account.
+
+        Safe path only: the cookie is minted by a CM logon (the local steam-user
+        service), then GCPD is scraped read-only. Never calls the token-consuming
+        auth endpoints. Returns None on any failure.
+        """
+        try:
+            sid = int(steam_id)
+        except (TypeError, ValueError):
+            return None
+        rank = self._facade.cs2_rank.fetch(sid, refresh_token)
+        if rank is None:
+            return None
+        return {
+            "premier_rating": rank.premier_rating,
+            "premier_wins": rank.premier_wins,
+            "wingman_rank": rank.wingman_rank,
+            "wingman_wins": rank.wingman_wins,
+            "cooldown_expires_unix": rank.cooldown_expires_unix,
+            "cooldown_reason": rank.cooldown_reason,
+        }
 
     def validate_api_key(self, key: str) -> str:
         """Return "valid", "invalid", or "error" for a Steam Web API key."""

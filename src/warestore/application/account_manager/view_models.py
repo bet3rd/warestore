@@ -28,6 +28,6 @@ class AccountCardMenuState:
 class AccountCardViewState:
     jwt_expires_in: int
     cooldown_label: str
-    cooldown_progress: float
     menu: AccountCardMenuState
     color: str = ""
+    cooldown_expires: int = 0

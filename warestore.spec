@@ -15,6 +15,13 @@ ICON = os.path.join(ROOT, 'assets', 'warestore.ico')
 # ── collect cryptography (ships a compiled Rust binding that must be bundled) ─
 crypto_datas, crypto_binaries, crypto_hidden = collect_all('cryptography')
 
+# ── collect the CS2 rank-mint stack: ValvePython/steam (dynamically-imported
+# generated protobufs), gevent (many C-extension submodules), and protobuf.
+# Used by the in-process CM cookie mint (infrastructure/steam/cs2_cm_mint.py).
+steam_datas, steam_binaries, steam_hidden = collect_all('steam')
+gevent_datas, gevent_binaries, gevent_hidden = collect_all('gevent')
+proto_datas, proto_binaries, proto_hidden = collect_all('google.protobuf')
+
 # The app only uses QtCore/QtGui/QtWidgets (+ QtNetwork for single-instance IPC).
 # Rely on PyInstaller's built-in PyQt5 hook to bundle just those imported modules
 # — NOT collect_all, which drags in QML, WebEngine, Multimedia, the 20MB
@@ -28,26 +35,29 @@ _QT_EXCLUDES = [
     'PyQt5.QtNfc', 'PyQt5.QtPositioning', 'PyQt5.QtLocation', 'PyQt5.QtSensors',
     'PyQt5.QtSerialPort', 'PyQt5.QtSql', 'PyQt5.QtTest', 'PyQt5.QtXml',
     'PyQt5.QtXmlPatterns', 'PyQt5.QtDesigner', 'PyQt5.QtHelp',
-    'PyQt5.QtPrintSupport', 'PyQt5.QtSvg', 'PyQt5.Qt3DCore', 'PyQt5.QtDBus',
+    'PyQt5.QtPrintSupport', 'PyQt5.Qt3DCore', 'PyQt5.QtDBus',
 ]
 _STDLIB_EXCLUDES = ['tkinter', 'unittest', 'pydoc', 'test', 'lib2to3', 'xmlrpc']
 
 a = Analysis(
     [os.path.join(ROOT, 'src', 'warestore', 'presentation', 'account_manager', 'main.py')],
     pathex=[os.path.join(ROOT, 'src')],
-    binaries=crypto_binaries,
+    binaries=crypto_binaries + steam_binaries + gevent_binaries + proto_binaries,
     datas=[
         (ICON, 'assets'),
+        (os.path.join(ROOT, 'assets', 'ranks'), 'assets/ranks'),
+        (os.path.join(ROOT, 'assets', 'fonts'), 'assets/fonts'),
         (
             os.path.join(ROOT, 'src', 'warestore', 'presentation',
                          'account_manager', 'ui', 'theme', 'qss'),
             'warestore/presentation/account_manager/ui/theme/qss',
         ),
-    ] + crypto_datas,
+    ] + crypto_datas + steam_datas + gevent_datas + proto_datas,
     hiddenimports=[
         'win32crypt', 'win32timezone', 'jwt', 'vdf', 'chardet',
         'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets', 'PyQt5.QtNetwork',
-    ] + crypto_hidden,
+        'greenlet',
+    ] + crypto_hidden + steam_hidden + gevent_hidden + proto_hidden,
     hookspath=[],
     runtime_hooks=[],
     excludes=_QT_EXCLUDES + _STDLIB_EXCLUDES,

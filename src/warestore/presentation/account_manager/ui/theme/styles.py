@@ -41,7 +41,7 @@ def ensure_app_icon_file() -> Path:
         return icon_path
 
     from PyQt5.QtCore import Qt
-    from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+    from PyQt5.QtGui import QColor, QFont, QPainter, QPixmap
 
     size = 64
     pixmap = QPixmap(size, size)

@@ -1,3 +1,6 @@
+import base64
+import json
+import time
 from types import SimpleNamespace
 
 from warestore.domain.auth.jwt_service import SteamJwtService
@@ -5,6 +8,27 @@ from warestore.domain.accounts.services.token_parser import TokenParser
 from warestore.domain.steam.services.login_service import SteamLoginService
 
 SAMPLE_JWT = "ey.payload.sig"
+
+
+def _jwt(iat: int) -> str:
+    """A minimal Steam-shaped refresh-token JWT carrying a given `iat`."""
+    def b64(d: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")
+
+    header = b64({"typ": "JWT", "alg": "EdDSA"})
+    payload = b64({"iss": "steam", "sub": "1", "aud": ["client", "web"],
+                   "iat": iat, "exp": iat + 99_999_999})
+    return f"{header}.{payload}.sig"
+
+
+def _jwt_exp(exp: int) -> str:
+    """A Steam-shaped JWT with an explicit `exp`."""
+    def b64(d: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")
+
+    header = b64({"typ": "JWT", "alg": "EdDSA"})
+    payload = b64({"iss": "steam", "sub": "1", "aud": ["client", "web"], "iat": 1, "exp": exp})
+    return f"{header}.{payload}.sig"
 
 
 class FakeProcess:
@@ -162,3 +186,91 @@ def test_corrupted_blob_for_one_account_does_not_block_others(monkeypatch):
     assert count == 1
     assert tokens.saved["76500000000000002"]["token"] == SAMPLE_JWT
     assert "76500000000000001" not in tokens.saved
+
+
+def test_reextracts_newer_token_for_existing_account(monkeypatch):
+    # The bug: a re-login rotates the refresh token, but extraction used to skip
+    # any account it already had a token for, keeping the stale one forever.
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    old, new = _jwt(1000), _jwt(2000)
+    files = FakeFiles(
+        loginusers=_loginusers([("76500000000000001", "acct")]),
+        local_vdf=_connect_cache({"key_acct": "enc"}),
+    )
+    crypto = FakeCrypto(decrypt_map={"acct": new})  # ConnectCache holds the NEWER token
+    tokens = FakeTokens()
+    tokens.saved = {"76500000000000001": {"username": "acct", "token": old}}  # stale stored
+    service = _make_service(files, crypto, tokens)
+
+    count = service.extract_tokens_from_steam()
+
+    assert count == 1
+    assert tokens.saved["76500000000000001"]["token"] == new  # refreshed to the newer one
+
+
+def test_does_not_downgrade_to_older_cached_token(monkeypatch):
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    old, new = _jwt(1000), _jwt(2000)
+    files = FakeFiles(
+        loginusers=_loginusers([("76500000000000001", "acct")]),
+        local_vdf=_connect_cache({"key_acct": "enc"}),
+    )
+    crypto = FakeCrypto(decrypt_map={"acct": old})  # ConnectCache has an OLDER token
+    tokens = FakeTokens()
+    tokens.saved = {"76500000000000001": {"username": "acct", "token": new}}  # newer stored
+    service = _make_service(files, crypto, tokens)
+
+    count = service.extract_tokens_from_steam()
+
+    assert count == 0
+    assert tokens.saved["76500000000000001"]["token"] == new  # kept the newer one
+
+
+def test_skip_expired_avoids_reextracting_dead_tokens(monkeypatch):
+    # 'Remove expired on refresh': an expired ConnectCache token must NOT be
+    # re-extracted, or it churns (re-added every refresh, then purged again).
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    expired = _jwt_exp(int(time.time()) - 86400)  # expired yesterday
+    files = FakeFiles(
+        loginusers=_loginusers([("76500000000000001", "acct")]),
+        local_vdf=_connect_cache({"key_acct": "enc"}),
+    )
+    tokens = FakeTokens()
+    service = _make_service(files, FakeCrypto(decrypt_map={"acct": expired}), tokens)
+
+    # Default (setting off): still extracted — unchanged behaviour.
+    assert service.extract_tokens_from_steam() == 1
+    tokens.saved.clear()
+
+    # Setting on: the dead token is not re-extracted.
+    assert service.extract_tokens_from_steam(skip_expired=True) == 0
+    assert tokens.saved == {}
+
+
+def test_valid_token_still_extracted_with_skip_expired(monkeypatch):
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    valid = _jwt_exp(int(time.time()) + 90 * 86400)
+    files = FakeFiles(
+        loginusers=_loginusers([("76500000000000001", "acct")]),
+        local_vdf=_connect_cache({"key_acct": "enc"}),
+    )
+    tokens = FakeTokens()
+    service = _make_service(files, FakeCrypto(decrypt_map={"acct": valid}), tokens)
+
+    assert service.extract_tokens_from_steam(skip_expired=True) == 1
+    assert tokens.saved["76500000000000001"]["token"] == valid
+
+
+def test_identical_token_is_not_rewritten(monkeypatch):
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    same = _jwt(1500)
+    files = FakeFiles(
+        loginusers=_loginusers([("76500000000000001", "acct")]),
+        local_vdf=_connect_cache({"key_acct": "enc"}),
+    )
+    crypto = FakeCrypto(decrypt_map={"acct": same})
+    tokens = FakeTokens()
+    tokens.saved = {"76500000000000001": {"username": "acct", "token": same}}
+    service = _make_service(files, crypto, tokens)
+
+    assert service.extract_tokens_from_steam() == 0

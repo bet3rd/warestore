@@ -34,9 +34,6 @@ class UserdataCleanupDialog(QDialog):
     token-managed accounts are absent from that list by design.
     """
 
-    SCOPE_DEAD = "dead"
-    SCOPE_ALL = "all"
-
     def __init__(self, parent, folders: list, *, exclude_from_capture: bool = True):
         super().__init__(parent)
         self._exclude_from_capture = exclude_from_capture

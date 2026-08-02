@@ -18,7 +18,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from warestore.presentation.account_manager.ui.accounts import AccountGrid
 from warestore.presentation.account_manager.ui.chrome import HeaderBar, RoundedPanel
 from warestore.presentation.account_manager.ui.section import SectionLabel
 
@@ -59,6 +58,7 @@ class SettingsPanel:
         self.spoofer_row = QWidget()
         self.cb_close_to_tray = QCheckBox("Close to tray (X hides window)")
         self.cb_auto_remove_expired = QCheckBox("Remove expired tokens on refresh")
+        self.cb_gcpd_on_launch = QCheckBox("Fetch CS2 ranks on launch")
         self.cb_exclude_capture = QCheckBox("Hide from screen capture (Discord, OBS)")
         self.le_api_key = QLineEdit()
         self.lbl_api_status = QLabel("")
@@ -220,6 +220,16 @@ class SettingsPanel:
             "Deletes expired JWT entries from tokens.json when accounts are loaded or refreshed."
         )
         layout.addWidget(self.cb_auto_remove_expired)
+
+        self.cb_gcpd_on_launch.setChecked(
+            self._settings.get("gcpd_check_on_launch", False)
+        )
+        self.cb_gcpd_on_launch.setToolTip(
+            "On startup, fetches each account's CS2 Premier/Wingman rank and\n"
+            "competitive cooldown from Steam (GCPD), one account at a time.\n"
+            "Only accounts with a saved token are checked."
+        )
+        layout.addWidget(self.cb_gcpd_on_launch)
 
         self.cb_exclude_capture.setChecked(self._settings.get("exclude_from_capture", True))
         self.cb_exclude_capture.setToolTip(

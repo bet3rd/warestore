@@ -63,3 +63,34 @@ def test_all_returns_records(tmp_path):
     repo.set_profiles({"1": {"persona": "Neo", "avatar_hash": "abc"}})
     allrecs = repo.all()
     assert allrecs["1"].persona == "Neo"
+
+
+def test_cs2_rank_persists_and_survives_reload(tmp_path):
+    path = str(tmp_path / "meta.json")
+    repo = AccountMetadataRepository(path=path)
+    repo.set_color("1", "#cc4444")  # pre-existing data must survive
+    repo.set_cs2_rank(
+        "1",
+        premier_rating=18567,
+        wingman_rank=12,
+        cooldown_expires=1796253080,
+        premier_wins=1234,
+        wingman_wins=56,
+    )
+
+    # New repo instance = reads from disk (simulates relaunch / reload).
+    rec = AccountMetadataRepository(path=path).get("1")
+    assert rec.premier_rating == 18567
+    assert rec.premier_wins == 1234
+    assert rec.wingman_rank == 12
+    assert rec.wingman_wins == 56
+    assert rec.cs2_cooldown_expires == 1796253080
+    assert rec.color == "#cc4444"  # untouched
+
+
+def test_cs2_rank_defaults_when_absent(tmp_path):
+    repo = AccountMetadataRepository(path=str(tmp_path / "meta.json"))
+    repo.set_color("1", "#cc4444")
+    rec = repo.get("1")
+    assert rec.premier_rating == -1 and rec.wingman_rank == -1 and rec.cs2_cooldown_expires == 0
+    assert rec.premier_wins == -1 and rec.wingman_wins == -1

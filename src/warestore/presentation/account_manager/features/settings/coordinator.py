@@ -102,8 +102,15 @@ class SettingsCoordinator:
     def on_auto_remove_expired_toggle(self, checked: bool) -> None:
         self._settings["auto_remove_expired_tokens"] = checked
         self._ctrl.save_settings(self._settings)
-        if checked and self._ctrl.purge_expired_tokens():
+        # Reloading runs the full cleanup (purge expired tokens + delete tokenless
+        # accounts) via load_accounts, and refreshes the grid.
+        if checked:
             self._reload_accounts()
+
+    def on_gcpd_check_toggle(self, checked: bool) -> None:
+        # Takes effect on the next launch; nothing to do right now.
+        self._settings["gcpd_check_on_launch"] = checked
+        self._ctrl.save_settings(self._settings)
 
     def on_exclude_from_capture_toggle(self, checked: bool) -> None:
         self._settings["exclude_from_capture"] = checked

@@ -16,6 +16,13 @@ class AccountRecord:
     # avatar on launch, before the next refresh completes.
     persona: str = ""
     avatar_hash: str = ""
+    # Cached from the last on-demand CS2 rank fetch so it survives a grid reload
+    # / relaunch. -1 = unknown/unranked; cooldown expiry is unix (0 = none).
+    premier_rating: int = -1
+    premier_wins: int = -1
+    wingman_rank: int = -1
+    wingman_wins: int = -1
+    cs2_cooldown_expires: int = 0
 
     @classmethod
     def from_raw(cls, raw: object) -> "AccountRecord":
@@ -31,6 +38,11 @@ class AccountRecord:
                 cs2_seeded=bool(raw.get("cs2_seeded", False)),
                 persona=str(raw.get("persona", "")),
                 avatar_hash=str(raw.get("avatar_hash", "")),
+                premier_rating=int(raw.get("premier_rating", -1)),
+                premier_wins=int(raw.get("premier_wins", -1)),
+                wingman_rank=int(raw.get("wingman_rank", -1)),
+                wingman_wins=int(raw.get("wingman_wins", -1)),
+                cs2_cooldown_expires=int(raw.get("cs2_cooldown_expires", 0)),
             )
         return cls()
 
@@ -44,4 +56,9 @@ class AccountRecord:
             "cs2_seeded": self.cs2_seeded,
             "persona": self.persona,
             "avatar_hash": self.avatar_hash,
+            "premier_rating": self.premier_rating,
+            "premier_wins": self.premier_wins,
+            "wingman_rank": self.wingman_rank,
+            "wingman_wins": self.wingman_wins,
+            "cs2_cooldown_expires": self.cs2_cooldown_expires,
         }

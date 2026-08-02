@@ -69,6 +69,17 @@ class _FakeController:
                 removed += 1
         return removed
 
+    def load_tokens(self):
+        return dict(self.tokens)
+
+    def purge_tokenless_accounts(self):
+        token_ids = set(self.tokens.keys())
+        if not token_ids:  # fail-closed: never mass-delete on an empty store
+            return 0
+        before = len(self.accounts)
+        self.accounts = [a for a in self.accounts if a["steamid"] in token_ids]
+        return before - len(self.accounts)
+
 
 def test_load_accounts_no_steam():
     ctrl = _FakeController()
@@ -96,6 +107,34 @@ def test_load_accounts_prefers_cached_persona_and_avatar():
     acc = result.accounts[0]
     assert acc["persona_name"] == "FreshName"  # cached name wins over loginusers.vdf
     assert acc["avatar_hash"] == "hash123"
+
+
+def test_load_accounts_removes_tokenless_when_setting_on():
+    ctrl = _FakeController()
+    # a second account in loginusers.vdf with NO saved token
+    ctrl.accounts.append(
+        {"steamid": "76561198000000002", "account_name": "bob", "timestamp": 1}
+    )
+    settings = ctrl.load_settings()
+    settings["auto_remove_expired_tokens"] = True
+    ctrl.load_settings = lambda: settings  # type: ignore[method-assign]
+
+    result = AccountManagerPresenter(ctrl).load_accounts()
+    ids = {a["steamid"] for a in result.accounts}
+    assert "76561198000000002" not in ids   # tokenless account removed
+    assert "76561198000000001" in ids        # account with a token kept
+    assert "Removed 1 tokenless account" in result.status_message
+
+
+def test_load_accounts_keeps_tokenless_when_setting_off():
+    ctrl = _FakeController()
+    ctrl.accounts.append(
+        {"steamid": "76561198000000002", "account_name": "bob", "timestamp": 1}
+    )
+    # setting defaults off -> tokenless accounts are left alone
+    result = AccountManagerPresenter(ctrl).load_accounts()
+    ids = {a["steamid"] for a in result.accounts}
+    assert "76561198000000002" in ids
 
 
 def test_relogin_entry_for():

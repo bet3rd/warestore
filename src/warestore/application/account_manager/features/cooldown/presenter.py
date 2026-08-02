@@ -11,7 +11,7 @@ from warestore.application.account_manager.controller import AccountManagerContr
 from warestore.application.account_manager.features.accounts.presenter import (
     AccountsPresenter,
 )
-from warestore.domain.accounts.cooldown import cooldown_progress, is_cooldown_active
+from warestore.domain.accounts.cooldown import is_cooldown_active
 
 
 class CooldownPresenter:
@@ -28,19 +28,6 @@ class CooldownPresenter:
             return ""
         record = self._ctrl.get_metadata(steam_id)
         return self._ctrl.format_cooldown(record.cooldown_until)
-
-    def cooldown_progress_for(self, steam_id: str) -> float:
-        if not steam_id:
-            return 0.0
-        record = self._ctrl.get_metadata(steam_id)
-        if not is_cooldown_active(record.cooldown_until):
-            return 0.0
-        # Active cooldown with an unknown duration (legacy/imported data): show a
-        # full bar so the UI signals "on cooldown" rather than an empty bar that
-        # reads as "ready". cooldown_progress() returns 0.0 for duration <= 0.
-        if record.cooldown_duration <= 0:
-            return 1.0
-        return cooldown_progress(record.cooldown_until, record.cooldown_duration)
 
     def set_account_cooldown(self, steam_id: str, duration_seconds: int) -> None:
         if not steam_id:

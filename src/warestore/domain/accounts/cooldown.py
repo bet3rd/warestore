@@ -41,7 +41,29 @@ def format_cooldown_remaining(until_ts: int, *, now: datetime | None = None) -> 
             return f"CD {hours}h {mins}m"
         return f"CD {hours}h"
     days = remaining // 86400
-    return f"CD {days}d"
+    if days < 30:
+        return f"CD {days}d"
+    return f"CD {days // 30}mo"
+
+
+def format_cooldown_short(until_ts: int, *, now: datetime | None = None) -> str:
+    """Compact label for the card: minutes only when under an hour, otherwise a
+    single coarser unit (hours / days / months). The tooltip uses the full
+    formatter (:func:`format_cooldown_remaining`) which keeps minutes."""
+    if until_ts <= 0:
+        return ""
+    current = now or datetime.now()
+    remaining = until_ts - int(current.timestamp())
+    if remaining <= 0:
+        return ""
+    if remaining < 3600:
+        return f"CD {max(1, remaining // 60)}m"
+    if remaining < 86400:
+        return f"CD {remaining // 3600}h"
+    days = remaining // 86400
+    if days < 30:
+        return f"CD {days}d"
+    return f"CD {days // 30}mo"
 
 
 def cooldown_progress(

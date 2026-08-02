@@ -12,6 +12,9 @@ from PyQt5.QtWidgets import QApplication, QFileDialog, QWidget
 
 from warestore.application.account_manager.controller import AccountManagerController
 from warestore.application.account_manager.presenter import AccountManagerPresenter
+from warestore.presentation.account_manager.features.accounts.cs2_rank_worker import (
+    Cs2RankWorker,
+)
 from warestore.presentation.account_manager.features.accounts.status_worker import (
     StatusFetchWorker,
 )
@@ -51,6 +54,16 @@ class AccountCoordinator:
         self._filter = filter_accounts
         self._selected: dict | None = None
         self._status_worker: StatusFetchWorker | None = None
+        self._cs2_rank_worker: Cs2RankWorker | None = None
+        # Sequential CS2 rank queue: minting a web session touches the account,
+        # so ranks are fetched one at a time — the next account only starts once
+        # the previous worker finishes (never concurrently).
+        self._cs2_rank_queue: list[dict] = []
+        self._cs2_batch_total = 0
+        self._cs2_batch_done = 0
+        self._cs2_batch_ok = 0
+        self._cs2_batch_skipped = 0
+        self._cs2_last_on_cooldown = False
 
     @property
     def selected_account(self) -> dict | None:
@@ -272,3 +285,107 @@ class AccountCoordinator:
         if self._grid.has_active_filters():
             self._grid.reapply_filters()
             self._sync_layout()
+
+    def fetch_all_cs2_ranks(self) -> None:
+        """Fetch CS2 rank for every account on the grid (sequentially)."""
+        self.fetch_cs2_ranks(self.accounts_on_grid())
+
+    def fetch_cs2_ranks(self, accounts) -> None:
+        """Fetch CS2 rank for one or more accounts, strictly sequentially.
+
+        Minting a web session touches each account, so ranks are fetched one at
+        a time: the next account only starts once the previous worker finishes.
+        Accounts without a saved token are skipped.
+        """
+        if self._cs2_rank_worker and self._cs2_rank_worker.isRunning():
+            self._info.setText("A CS2 rank fetch is already running…")
+            return
+        targets = normalize_account_targets(accounts)
+        queue = [
+            acc
+            for acc in targets
+            if acc.get("steamid", "")
+            and self._ctrl.saved_token_entry(acc["steamid"]).get("token", "")
+        ]
+        if not queue:
+            self._info.setText(
+                "No saved tokens for the selected account(s) — can't fetch rank."
+            )
+            return
+        self._cs2_rank_queue = queue
+        self._cs2_batch_total = len(queue)
+        self._cs2_batch_done = 0
+        self._cs2_batch_ok = 0
+        self._cs2_batch_skipped = len(targets) - len(queue)
+        self._start_next_cs2_rank()
+
+    def _start_next_cs2_rank(self) -> None:
+        if not self._cs2_rank_queue:
+            self._finish_cs2_batch()
+            return
+        acc = self._cs2_rank_queue.pop(0)
+        sid = acc.get("steamid", "")
+        token = self._ctrl.saved_token_entry(sid).get("token", "")
+        name = acc.get("account_name", "") or sid
+        if self._cs2_batch_total > 1:
+            self._info.setText(
+                f"Fetching CS2 rank {self._cs2_batch_done + 1}/{self._cs2_batch_total} — {name}…"
+            )
+        else:
+            self._info.setText(f"Fetching CS2 rank for {name}…")
+        self._cs2_rank_worker = Cs2RankWorker(sid, token, ctrl=self._ctrl)
+        self._cs2_rank_worker.done.connect(self._on_cs2_rank_done)
+        self._cs2_rank_worker.start()
+
+    def _on_cs2_rank_done(self, steam_id: str, data) -> None:
+        self._cs2_batch_done += 1
+        if data:
+            self._cs2_batch_ok += 1
+            premier = data.get("premier_rating", -1)
+            premier_wins = data.get("premier_wins", -1)
+            wingman = data.get("wingman_rank", -1)
+            wingman_wins = data.get("wingman_wins", -1)
+            cooldown = data.get("cooldown_expires_unix", 0)
+            for card in self._grid.cards():
+                if card.acc.get("steamid", "") != steam_id:
+                    continue
+                card.set_cs2_rank(
+                    premier, wingman, cooldown, premier_wins, wingman_wins
+                )
+                # Keep the acc dict in sync so a later reload re-applies it too.
+                card.acc["premier_rating"] = premier
+                card.acc["premier_wins"] = premier_wins
+                card.acc["wingman_rank"] = wingman
+                card.acc["wingman_wins"] = wingman_wins
+                card.acc["cs2_cooldown_expires"] = cooldown
+                break
+            # Persist so it survives a grid reload / relaunch.
+            self._ctrl.persist_cs2_rank(
+                steam_id, premier, wingman, cooldown, premier_wins, wingman_wins
+            )
+            self._cs2_last_on_cooldown = bool(cooldown)
+        # One failure never aborts the batch — carry on to the next account.
+        self._start_next_cs2_rank()
+
+    def _finish_cs2_batch(self) -> None:
+        total = self._cs2_batch_total
+        ok = self._cs2_batch_ok
+        failed = total - ok
+        if total <= 1:
+            if ok:
+                self._info.setText(
+                    "CS2 rank updated — competitive cooldown active."
+                    if self._cs2_last_on_cooldown
+                    else "CS2 rank updated."
+                )
+            else:
+                self._info.setText(
+                    "CS2 rank fetch failed — check the dev log for details."
+                )
+        else:
+            parts = [f"{ok} updated"]
+            if failed:
+                parts.append(f"{failed} failed")
+            if self._cs2_batch_skipped:
+                parts.append(f"{self._cs2_batch_skipped} skipped (no token)")
+            self._info.setText("CS2 ranks: " + ", ".join(parts) + ".")
