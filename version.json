@@ -1,6 +1,6 @@
 {
     "latest_version": "3.3.1",
-    "change_log": "**New features**\n- **ui:** Interface scaling (DPI)\n\n**Bug fixes**\n- **release:** Proper 3.3.0 changelog in version.json",
+    "change_log": "**New features**\n- **Display** \u2014 scale the whole interface from Settings \u2192 Display (100%, 110%, 125%, 150%, or 200%) for comfortable use on high-resolution monitors. Cards, icons, and avatars stay crisp at every scale, and it applies after a restart.",
     "download_url": "https://github.com/bet3rd/warestore/releases/latest/download/WareStoreSetup.exe",
     "force_update_below_version": "3"
 }
