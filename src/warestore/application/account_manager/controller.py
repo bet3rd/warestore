@@ -265,6 +265,10 @@ class AccountManagerController:
     def saved_token_entry(self, steam_id: str) -> dict:
         return self.load_tokens().get(steam_id, {})
 
+    def remove_token(self, steam_id: str) -> bool:
+        """Delete an account's saved token from the vault."""
+        return self._facade.tokens.remove(steam_id)
+
     # --- metadata ---
 
     def get_metadata(self, steam_id: str) -> AccountRecord:

@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -279,3 +280,84 @@ class UpdateDialog(QDialog):
         if self.force_update:
             sys.exit(0)
         super().closeEvent(event)
+
+
+class DeadAccountsDialog(QDialog):
+    """Offer to remove accounts whose saved token looks dead (expired, or rejected
+    by Steam). A checkable list — the checked accounts are returned on accept."""
+
+    def __init__(self, parent, dead_accounts, *, exclude_from_capture: bool = True):
+        super().__init__(parent)
+        self._exclude_from_capture = exclude_from_capture
+
+        self.setObjectName("warestore_dialog")
+        self.setWindowTitle("Accounts not working")
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setFixedWidth(440)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 20)
+        layout.setSpacing(14)
+
+        n = len(dead_accounts)
+        title = QLabel(f"{n} account{'s' if n != 1 else ''} not working")
+        title.setObjectName("dialog_title")
+        layout.addWidget(title)
+
+        msg = QLabel(
+            "Their saved token looks dead (expired, or rejected by Steam). Remove "
+            "them from your PC? This deletes each one from Steam's login list and "
+            "erases its saved token."
+        )
+        msg.setObjectName("info")
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        self._list = QListWidget()
+        self._list.setSelectionMode(QListWidget.NoSelection)
+        self._list.setMaximumHeight(200)
+        self._list.setStyleSheet(
+            "QListWidget { background: #1a1a1a; border: 1px solid #2a2a2a;"
+            " border-radius: 6px; color: #cfcfcf; font-size: 12px; padding: 4px; }"
+            "QListWidget::item { padding: 4px 6px; }"
+        )
+        for acc in dead_accounts:
+            item = QListWidgetItem(f"{acc.get('name', '')}   —   {acc.get('reason', '')}")
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            item.setData(Qt.UserRole, acc)
+            self._list.addItem(item)
+        layout.addWidget(self._list)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        btn_row.addStretch()
+        btn_row.addWidget(self._make_button("Keep them", self.reject, primary=False))
+        btn_row.addWidget(self._make_button("Remove selected", self.accept, primary=True))
+        layout.addLayout(btn_row)
+
+        self.adjustSize()
+        self.setFixedSize(self.size())
+        self.setWindowModality(Qt.WindowModal)
+
+    def selected_accounts(self) -> list:
+        out = []
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            if item.checkState() == Qt.Checked:
+                out.append(item.data(Qt.UserRole))
+        return out
+
+    def _make_button(self, text: str, on_click, *, primary: bool) -> QPushButton:
+        btn = QPushButton(text)
+        if not primary:
+            btn.setObjectName("secondary")
+        btn.setMinimumSize(108, 36)
+        btn.setStyleSheet("min-height: 0; padding: 6px 16px; font-size: 12px;")
+        btn.clicked.connect(on_click)
+        return btn
+
+    def showEvent(self, event):
+        enable_dark_title_bar(int(self.winId()))
+        schedule_capture_exclusion_for_widget(self, enabled=self._exclude_from_capture)
+        super().showEvent(event)

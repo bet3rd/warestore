@@ -64,6 +64,10 @@ class AccountCoordinator:
         self._cs2_batch_ok = 0
         self._cs2_batch_skipped = 0
         self._cs2_last_on_cooldown = False
+        # Accounts flagged dead during a sweep (expired offline, or logon-rejected)
+        # -> prompted for removal when the batch finishes.
+        self._cs2_dead: list[dict] = []
+        self._cs2_current: dict | None = None
 
     @property
     def selected_account(self) -> dict | None:
@@ -317,13 +321,37 @@ class AccountCoordinator:
         self._cs2_batch_done = 0
         self._cs2_batch_ok = 0
         self._cs2_batch_skipped = len(targets) - len(queue)
+        self._cs2_dead = []
         self._start_next_cs2_rank()
 
+    def _flag_dead(self, acc: dict, reason: str) -> None:
+        self._cs2_dead.append(
+            {
+                "steamid": acc.get("steamid", ""),
+                "name": acc.get("persona_name")
+                or acc.get("account_name", "")
+                or acc.get("steamid", ""),
+                "reason": reason,
+            }
+        )
+
     def _start_next_cs2_rank(self) -> None:
+        # Skip accounts whose token is already dead offline (expired / malformed)
+        # — flag them without wasting a CM logon on a token Steam will reject.
+        while self._cs2_rank_queue:
+            acc = self._cs2_rank_queue[0]
+            token = self._ctrl.saved_token_entry(acc.get("steamid", "")).get("token", "")
+            if self._ctrl.verify_token_expiry(token) < 0:
+                self._cs2_rank_queue.pop(0)
+                self._cs2_batch_done += 1
+                self._flag_dead(acc, "Token expired")
+            else:
+                break
         if not self._cs2_rank_queue:
             self._finish_cs2_batch()
             return
         acc = self._cs2_rank_queue.pop(0)
+        self._cs2_current = acc
         sid = acc.get("steamid", "")
         token = self._ctrl.saved_token_entry(sid).get("token", "")
         name = acc.get("account_name", "") or sid
@@ -337,9 +365,11 @@ class AccountCoordinator:
         self._cs2_rank_worker.done.connect(self._on_cs2_rank_done)
         self._cs2_rank_worker.start()
 
-    def _on_cs2_rank_done(self, steam_id: str, data) -> None:
+    def _on_cs2_rank_done(self, steam_id: str, data, dead: bool = False) -> None:
         self._cs2_batch_done += 1
-        if data:
+        if dead:
+            self._flag_dead(self._cs2_current or {"steamid": steam_id}, "Logon rejected")
+        elif data:
             self._cs2_batch_ok += 1
             premier = data.get("premier_rating", -1)
             premier_wins = data.get("premier_wins", -1)
@@ -370,7 +400,7 @@ class AccountCoordinator:
     def _finish_cs2_batch(self) -> None:
         total = self._cs2_batch_total
         ok = self._cs2_batch_ok
-        failed = total - ok
+        dead = len(self._cs2_dead)
         if total <= 1:
             if ok:
                 self._info.setText(
@@ -378,14 +408,50 @@ class AccountCoordinator:
                     if self._cs2_last_on_cooldown
                     else "CS2 rank updated."
                 )
+            elif dead:
+                self._info.setText("CS2 rank fetch failed — the token looks dead.")
             else:
                 self._info.setText(
                     "CS2 rank fetch failed — check the dev log for details."
                 )
         else:
             parts = [f"{ok} updated"]
-            if failed:
-                parts.append(f"{failed} failed")
+            if dead:
+                parts.append(f"{dead} not working")
+            transient = total - ok - dead
+            if transient:
+                parts.append(f"{transient} failed")
             if self._cs2_batch_skipped:
                 parts.append(f"{self._cs2_batch_skipped} skipped (no token)")
             self._info.setText("CS2 ranks: " + ", ".join(parts) + ".")
+        # Only prompt for removal after a multi-account sweep — a single
+        # right-click fetch just reports the dead token in the status bar.
+        if self._cs2_dead and self._cs2_batch_total > 1:
+            self._prompt_dead_accounts()
+
+    def _prompt_dead_accounts(self) -> None:
+        """Offer to remove accounts flagged dead during the sweep (expired token
+        or a logon Steam rejected). Removal purges the login entry + token."""
+        from warestore.presentation.account_manager.ui.dialogs import DeadAccountsDialog
+
+        dead = self._cs2_dead
+        self._cs2_dead = []
+        dialog = DeadAccountsDialog(
+            self._parent,
+            dead,
+            exclude_from_capture=bool(self._settings.get("exclude_from_capture", True)),
+        )
+        if not dialog.exec_():
+            return
+        selected = dialog.selected_accounts()
+        if selected:
+            self.remove_accounts(selected)
+
+    def remove_accounts(self, accounts: list[dict]) -> None:
+        removed = 0
+        for acc in accounts:
+            if self._presenter.delete_account(acc.get("steamid", "")):
+                removed += 1
+        if removed:
+            self.load_accounts()
+            self._info.setText(f"Removed {removed} dead account(s).")

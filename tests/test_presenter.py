@@ -19,6 +19,7 @@ class _FakeController:
             }
         }
         self.deleted: list[str] = []
+        self.removed_tokens: list[str] = []
 
     def steam_install_path(self):
         return self.steam_path
@@ -52,6 +53,10 @@ class _FakeController:
 
     def delete_metadata(self, steam_id: str):
         pass
+
+    def remove_token(self, steam_id: str):
+        self.removed_tokens.append(steam_id)
+        return True
 
     def load_settings(self):
         return {
@@ -169,6 +174,8 @@ def test_delete_account_calls_metadata_cleanup():
     ctrl = _FakeController()
     assert AccountManagerPresenter(ctrl).delete_account("76561198000000001")
     assert ctrl.deleted == ["76561198000000001"]
+    # The saved token is purged too, so the account can't reappear on refresh.
+    assert ctrl.removed_tokens == ["76561198000000001"]
 
 
 def test_load_accounts_purges_expired_when_enabled():

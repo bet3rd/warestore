@@ -32,6 +32,23 @@ _UM_METHOD = "Authentication.GenerateAccessTokenForApp#1"
 _PROTOCOL_VERSION = 65580
 _CM_ATTEMPTS = 3
 
+# CM logon EResults that mean the refresh token itself is bad/revoked — safe to
+# treat the account as dead. Everything else (TryAnotherCM, ServiceUnavailable,
+# timeouts, "no response") is transient and must NEVER flag an account.
+_REJECTED_ERESULTS = frozenset({"InvalidPassword", "Expired", "Revoked", "AccessDenied"})
+
+
+class TokenRejectedError(Exception):
+    """The CM logon rejected the refresh token (e.g. InvalidPassword / Revoked).
+
+    Distinct from a transient failure (returned as None): this means the token is
+    dead, so the caller can offer to remove the account.
+    """
+
+    def __init__(self, eresult: str):
+        super().__init__(eresult)
+        self.eresult = eresult
+
 
 def _clean_token(raw: str) -> str:
     """Bare JWT from the app's ``username----<JWT>`` format (or a plain JWT).
@@ -120,6 +137,7 @@ def mint_web_cookies(refresh_token: str) -> dict | None:
     client = SteamClient()
     try:
         resp = None
+        rejected = None  # a definitive token-rejection EResult, if seen
         for attempt in range(1, _CM_ATTEMPTS + 1):
             if not client.connected and client.connect() is None:
                 logger.info("cs2-mint: attempt %d could not connect to a CM", attempt)
@@ -135,7 +153,13 @@ def mint_web_cookies(refresh_token: str) -> dict | None:
                 client.disconnect()
             except Exception:  # noqa: BLE001
                 pass
+            if reason in _REJECTED_ERESULTS:
+                rejected = reason  # a bad token won't recover on retry — stop
+                break
         if resp is None:
+            if rejected is not None:
+                logger.warning("cs2-mint: token rejected (%s) — account is dead", rejected)
+                raise TokenRejectedError(rejected)
             logger.warning("cs2-mint: CM logon failed after %d attempts", _CM_ATTEMPTS)
             return None
 
@@ -160,6 +184,8 @@ def mint_web_cookies(refresh_token: str) -> dict | None:
             "steamLoginSecure": urllib.parse.quote(f"{steamid}||{access_token}", safe=""),
             "sessionid": secrets.token_hex(12),
         }
+    except TokenRejectedError:
+        raise  # a dead-token signal, not an unexpected error — let it propagate
     except Exception:  # noqa: BLE001 - never propagate into the worker
         logger.exception("cs2-mint: unexpected error during mint")
         return None

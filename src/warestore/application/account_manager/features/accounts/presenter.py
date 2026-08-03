@@ -154,5 +154,8 @@ class AccountsPresenter:
             return False
         if self._ctrl.delete_account(steam_id):
             self._ctrl.delete_metadata(steam_id)
+            # Purge the saved token too, otherwise the account reappears on the
+            # next refresh (extract_tokens_from_steam re-populates from the vault).
+            self._ctrl.remove_token(steam_id)
             return True
         return False
