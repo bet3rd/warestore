@@ -1,6 +1,6 @@
 {
-    "latest_version": "3.3.1",
-    "change_log": "**New features**\n- **Display** \u2014 scale the whole interface from Settings \u2192 Display (100%, 110%, 125%, 150%, or 200%) for comfortable use on high-resolution monitors. Cards, icons, and avatars stay crisp at every scale, and it applies after a restart.",
+    "latest_version": "3.4",
+    "change_log": "**New features**\n- **ui:** Warn about Steam rate limits on \"fetch CS2 ranks on launch\"\n- **cs2:** Detect dead-token accounts and offer removal after a sweep\n\n**Bug fixes**\n- **ui:** Scroll long changelogs in the update dialog",
     "download_url": "https://github.com/bet3rd/warestore/releases/latest/download/WareStoreSetup.exe",
     "force_update_below_version": "3"
 }
