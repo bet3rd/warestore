@@ -3,8 +3,8 @@
 
 import sys
 
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QPalette
+from PyQt5.QtCore import QRectF, Qt, pyqtSignal
+from PyQt5.QtGui import QBrush, QColor, QPainter, QPainterPath, QPalette, QPixmap
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -21,6 +21,37 @@ from PyQt5.QtWidgets import (
 
 from warestore.presentation.account_manager.ui.chrome import HeaderBar, RoundedPanel
 from warestore.presentation.account_manager.ui.section import SectionLabel
+
+
+def _warning_icon(px: int = 14) -> QPixmap:
+    """An amber warning triangle (with an exclamation mark), painted so its visual
+    centre is the pixmap centre — so it lines up with adjacent text when the label
+    is vertically centred. 2x-supersampled + devicePixelRatio for crispness."""
+    ratio = 2
+    pm = QPixmap(px * ratio, px * ratio)
+    pm.fill(Qt.transparent)
+    pm.setDevicePixelRatio(ratio)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    s = float(px)
+    triangle = QPainterPath()
+    triangle.moveTo(s / 2, s * 0.11)
+    triangle.lineTo(s * 0.93, s * 0.85)
+    triangle.lineTo(s * 0.07, s * 0.85)
+    triangle.closeSubpath()
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(QColor("#e0a021")))
+    p.drawPath(triangle)
+    # Exclamation mark cut into the triangle (dark).
+    p.setBrush(QBrush(QColor("#231a06")))
+    bar_w = s * 0.11
+    p.drawRoundedRect(
+        QRectF(s / 2 - bar_w / 2, s * 0.37, bar_w, s * 0.27), bar_w / 2, bar_w / 2
+    )
+    dot = s * 0.13
+    p.drawEllipse(QRectF(s / 2 - dot / 2, s * 0.69, dot, dot))
+    p.end()
+    return pm
 
 
 class BulkTokenEdit(QPlainTextEdit):
@@ -223,6 +254,10 @@ class SettingsPanel:
         )
         layout.addWidget(self.cb_auto_remove_expired)
 
+        gcpd_row = QWidget()
+        gcpd_h = QHBoxLayout(gcpd_row)
+        gcpd_h.setContentsMargins(0, 0, 0, 0)
+        gcpd_h.setSpacing(6)
         self.cb_gcpd_on_launch.setChecked(
             self._settings.get("gcpd_check_on_launch", False)
         )
@@ -231,7 +266,20 @@ class SettingsPanel:
             "competitive cooldown from Steam (GCPD), one account at a time.\n"
             "Only accounts with a saved token are checked."
         )
-        layout.addWidget(self.cb_gcpd_on_launch)
+        gcpd_h.addWidget(self.cb_gcpd_on_launch, 0, Qt.AlignVCenter)
+        gcpd_warn = QLabel()
+        gcpd_warn.setPixmap(_warning_icon(14))
+        gcpd_warn.setToolTip(
+            "<div style='color:#e0a021; white-space:nowrap'>"
+            "With many accounts this can hit Steam's rate limit.<br>"
+            "Fetches run one at a time to ease it, but a large roster<br>"
+            "may still be slow or get throttled — consider running it<br>"
+            "manually with the button next to Refresh instead."
+            "</div>"
+        )
+        gcpd_h.addWidget(gcpd_warn, 0, Qt.AlignVCenter)
+        gcpd_h.addStretch()
+        layout.addWidget(gcpd_row)
 
         self.cb_exclude_capture.setChecked(self._settings.get("exclude_from_capture", True))
         self.cb_exclude_capture.setToolTip(
