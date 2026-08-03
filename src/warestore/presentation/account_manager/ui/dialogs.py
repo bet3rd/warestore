@@ -6,13 +6,16 @@ import sys
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
+    QAbstractScrollArea,
     QButtonGroup,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QVBoxLayout,
 )
 
@@ -204,11 +207,26 @@ class UpdateDialog(QDialog):
             changelog.setObjectName("changelog")
             changelog.setWordWrap(True)
             changelog.setTextFormat(Qt.MarkdownText)
+            changelog.setAlignment(Qt.AlignTop | Qt.AlignLeft)
             changelog.setStyleSheet(
-                "color: #b8b8b8; font-size: 12px; background: #1a1a1a;"
-                " border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px 12px;"
+                "color: #b8b8b8; font-size: 12px; background: transparent;"
+                " border: none; padding: 10px 12px;"
             )
-            layout.addWidget(changelog)
+            # Scroll the notes inside a fixed-height frame so a long changelog can't
+            # stretch the window; short ones still size snugly (AdjustToContents).
+            changelog_scroll = QScrollArea()
+            changelog_scroll.setWidget(changelog)
+            changelog_scroll.setWidgetResizable(True)
+            changelog_scroll.setFrameShape(QFrame.NoFrame)
+            changelog_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            changelog_scroll.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+            changelog_scroll.setMaximumHeight(180)
+            changelog_scroll.setStyleSheet(
+                "QScrollArea { background: #1a1a1a; border: 1px solid #2a2a2a;"
+                " border-radius: 6px; }"
+            )
+            changelog_scroll.viewport().setStyleSheet("background: transparent;")
+            layout.addWidget(changelog_scroll)
 
         if not force_update:
             prompt = QLabel("Download and install now?")
