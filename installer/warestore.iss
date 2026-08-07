@@ -63,7 +63,12 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; runascurrentuser: the app's manifest is requireAdministrator, and Inno runs
+; postinstall entries de-elevated (as the original user) by default, so a plain
+; CreateProcess launch fails with "code 740 / requires elevation". Running it as
+; the current (already-elevated) user reuses Setup's admin token — no error, no
+; extra UAC prompt.
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [Code]
 // On uninstall, offer to also delete user data (accounts, tokens, settings,
