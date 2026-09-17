@@ -8,6 +8,7 @@ from PyQt5.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QApplication, QMenu
 
 from warestore.application.account_manager.view_models import AccountCardMenuState
+from warestore.domain.accounts.friend_code import friend_code_for_steamid
 
 COLOR_CHOICES: tuple[tuple[str, str], ...] = (
     ("None", ""),
@@ -67,6 +68,7 @@ def show_account_card_menu(
     token_available = menu_state.has_saved_token
     username = menu_state.username
     steam_id = menu_state.steam_id
+    friend_code = friend_code_for_steamid(steam_id)
 
     menu = QMenu(parent)
     if multi:
@@ -80,6 +82,8 @@ def show_account_card_menu(
     menu.addSeparator()
     act_copy_user = menu.addAction("Copy username")
     act_copy_user.setEnabled(not multi and bool(username))
+    act_copy_friend = menu.addAction("Copy friend code")
+    act_copy_friend.setEnabled(not multi and bool(friend_code))
     act_copy = menu.addAction("Copy token")
     act_copy.setEnabled(token_available and not multi)
     menu.addSeparator()
@@ -178,6 +182,8 @@ def show_account_card_menu(
         on_relogin(account)
     elif chosen == act_copy_user and username and not multi:
         QApplication.clipboard().setText(username)
+    elif chosen == act_copy_friend and friend_code and not multi:
+        QApplication.clipboard().setText(friend_code)
     elif chosen == act_copy and token_available and not multi:
         token = menu_state.saved_token
         if token:

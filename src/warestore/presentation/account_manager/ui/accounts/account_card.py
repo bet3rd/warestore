@@ -38,6 +38,7 @@ from warestore.domain.accounts.cooldown import (
     format_cooldown_remaining,
     format_cooldown_short,
 )
+from warestore.domain.accounts.friend_code import friend_code_for_steamid
 from warestore.domain.auth.formatters import JWT_NO_TOKEN, format_jwt_expiry_label
 from warestore.presentation.account_manager.ui.accounts.account_card_menu import (
     show_account_card_menu,
@@ -473,6 +474,12 @@ class AccountCard(QWidget):
                 "Status",
                 f"<span style='color:{status[1]}'>&#9679;</span>&nbsp;"
                 f"<span style='color:#d6d6d6'>{esc(status[0])}</span>",
+            ))
+        friend_code = friend_code_for_steamid(steamid)
+        if friend_code:
+            rows.append((
+                "Friend code",
+                f"<span style='color:#d6d6d6;font-family:Consolas,monospace'>{esc(friend_code)}</span>",
             ))
         if has_premier(self._premier_rating):
             tier_c = _PREMIER_TIER_COLORS[premier_tier(self._premier_rating)]
