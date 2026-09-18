@@ -3,4 +3,4 @@
 
 """WareStore — Steam account management."""
 
-__version__ = "3.4"
+__version__ = "3.4.1"
