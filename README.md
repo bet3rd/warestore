@@ -21,6 +21,8 @@
 <a href="https://warestore.cc">Website</a>
 </h3>
 
+<img src="assets/screenshot.png" width="900" alt="WareStore Account Manager, with the settings panel open">
+
 </div>
 
 ---
