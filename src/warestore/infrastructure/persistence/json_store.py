@@ -5,8 +5,9 @@
 
 import json
 import logging
-import os
 from typing import Any
+
+from warestore.infrastructure.persistence.atomic_write import atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,6 @@ class JsonStore:
             return dict(default or {})
 
     def write(self, data: dict[str, Any]) -> None:
-        os.makedirs(os.path.dirname(self._path), exist_ok=True)
-        with open(self._path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        # Serialize first, then swap the file in atomically: a crash mid-write
+        # must never leave a truncated document behind.
+        atomic_write_text(self._path, json.dumps(data, indent=2))

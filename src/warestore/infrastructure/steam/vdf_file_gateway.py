@@ -3,6 +3,8 @@
 
 import vdf
 
+from warestore.infrastructure.persistence.atomic_write import atomic_write_text
+
 
 class VdfFileGateway:
     def detect_encoding(self, file_path: str) -> str:
@@ -20,13 +22,12 @@ class VdfFileGateway:
             return f.read()
 
     def write_text(self, file_path: str, text: str) -> None:
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(text)
+        # Atomic: a truncated loginusers.vdf/config.vdf breaks Steam login.
+        atomic_write_text(file_path, text)
 
     def read_vdf(self, file_path: str) -> dict:
         with open(file_path, encoding=self.detect_encoding(file_path), errors="replace") as f:
             return vdf.loads(f.read())
 
     def write_vdf(self, file_path: str, data: dict) -> None:
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(vdf.dumps(data, pretty=True))
+        atomic_write_text(file_path, vdf.dumps(data, pretty=True))

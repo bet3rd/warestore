@@ -22,6 +22,7 @@ from typing import Any
 
 import win32crypt
 
+from warestore.infrastructure.persistence.atomic_write import atomic_write_bytes
 from warestore.infrastructure.persistence import vault_crypto
 
 logger = logging.getLogger(__name__)
@@ -124,5 +125,6 @@ class SecureJsonStore:
         os.makedirs(os.path.dirname(self._path), exist_ok=True)
         raw = json.dumps(data, indent=2).encode("utf-8")
         blob = vault_crypto.encrypt(self._key, raw) if self._key is not None else _protect(raw)
-        with open(self._path, "wb") as f:
-            f.write(blob)
+        # Atomic swap: a half-written vault is unrecoverable -- every saved
+        # refresh token would be lost.
+        atomic_write_bytes(self._path, blob)
