@@ -9,6 +9,15 @@ from warestore.config.settings import CS2_APP_ID, STEAMID64_BASE
 
 logger = logging.getLogger(__name__)
 
+# Steam Cloud bookkeeping, deliberately NOT copied. `remotecache.vdf` is the
+# per-file sync ledger (sha/size/timestamps) and the `*_lastclouded` files are
+# snapshots of what was last uploaded. Carrying the SOURCE account's versions
+# into the TARGET makes Steam believe the copied files are already in sync with
+# that account's cloud, so on the next launch the cloud copy wins and silently
+# overwrites the config we just seeded. Leaving them out makes the seeded files
+# look locally modified, so Steam uploads them instead of clobbering them.
+_CLOUD_LEDGER = ("remotecache.vdf", "*_lastclouded")
+
 
 class Cs2ConfigGateway:
     """Copy an account's per-user CS2 (app 730) config folder to another account.
@@ -40,6 +49,12 @@ class Cs2ConfigGateway:
     def copy_config(self, steam_dir: str, src_sid: str, dst_sid: str) -> bool:
         """Copy the source 730 folder into the target, backing up any existing one.
 
+        Everything the account's CS2 config holds comes along -- binds
+        (``cs2_user_keys_*.vcfg``), convars/crosshair/sens
+        (``cs2_user_convars_*.vcfg``), video settings, and the loadout files
+        under ``remote/cfg`` -- except Steam Cloud's bookkeeping, see
+        ``_CLOUD_LEDGER``.
+
         Returns True only when a copy actually happened. No-op (False) when the
         two SteamIDs match or the source has no CS2 config to copy.
         """
@@ -59,7 +74,7 @@ class Cs2ConfigGateway:
                 os.replace(dst, backup)  # same-filesystem rename of the dir
                 logger.info(f"CS2 config: backed up existing target → {backup}")
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copytree(src, dst)
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns(*_CLOUD_LEDGER))
             logger.info(f"CS2 config: copied {src} → {dst}")
             return True
         except OSError as exc:

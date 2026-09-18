@@ -9,6 +9,7 @@ from warestore.application.account_manager.controller import AccountManagerContr
 from warestore.domain.accounts.models import AccountRecord
 from warestore.domain.accounts.services.token_parser import TokenParser
 from warestore.domain.auth.jwt_service import SteamJwtService
+from warestore.infrastructure.steam.cs2_cloud_gateway import Cs2CloudGateway
 from warestore.infrastructure.steam.cs2_config_gateway import Cs2ConfigGateway
 from warestore.infrastructure.steam.persona_gateway import PersonaGateway
 
@@ -41,12 +42,15 @@ class _FakeMetadata:
         rec.cs2_seeded = seeded
 
 
-def _make_controller(tmp_path, source_sid, *, login_ok=True):
+def _make_controller(tmp_path, source_sid, *, login_ok=True, disable_cloud=True):
     cs2 = Cs2ConfigGateway()
     facade = SimpleNamespace(
-        settings=_FakeSettings({"cs2_config_source_sid": source_sid}),
+        settings=_FakeSettings(
+            {"cs2_config_source_sid": source_sid, "cs2_disable_cloud": disable_cloud}
+        ),
         metadata=_FakeMetadata(),
         cs2_config=cs2,
+        cs2_cloud=Cs2CloudGateway(),
         parser=TokenParser(),
         jwt=SteamJwtService(),
         steam_login=SimpleNamespace(
@@ -208,3 +212,88 @@ def test_token_add_noop_without_source(tmp_path):
     ctrl, facade = _make_controller(tmp_path, "")
     assert ctrl.perform_token_login(_token_for(DST_SID)) is True
     assert not facade.cs2_config.has_config(str(tmp_path), DST_SID)
+
+
+# --- the copied config must carry binds and survive Steam Cloud ---
+
+
+def _write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _rich_source(tmp_path):
+    """A source 730 tree shaped like a real one: binds, convars, video, and the
+    Steam Cloud bookkeeping that must NOT be carried over."""
+    base = Cs2ConfigGateway().config_dir(str(tmp_path), SRC_SID)
+    _write(os.path.join(base, "local", "cfg", "cs2_user_keys_0_slot0.vcfg"),
+           '"config" { "bindings" { "x" "+voicerecord" } }')
+    _write(os.path.join(base, "local", "cfg", "cs2_user_convars_0_slot0.vcfg"), "sens 1.2")
+    _write(os.path.join(base, "local", "cfg", "cs2_video.txt"), "fps=300")
+    _write(os.path.join(base, "remote", "cs2_user_keys.vcfg"), "cloud binds")
+    _write(os.path.join(base, "remote", "cfg", "cs2_preferred_items.txt"), "loadout")
+    # cloud bookkeeping
+    _write(os.path.join(base, "remotecache.vdf"), '"730" { "ChangeNumber" "405" }')
+    _write(os.path.join(base, "local", "cfg", "cs2_user_keys_0_slot0.vcfg_lastclouded"),
+           "stale sync snapshot")
+    return base
+
+
+def test_copy_carries_binds_and_full_config(tmp_path):
+    _rich_source(tmp_path)
+    ctrl, _ = _make_controller(tmp_path, SRC_SID)
+    assert ctrl.seed_cs2_config_if_new(DST_SID) is True
+
+    dst = Cs2ConfigGateway().config_dir(str(tmp_path), DST_SID)
+    keys = os.path.join(dst, "local", "cfg", "cs2_user_keys_0_slot0.vcfg")
+    assert os.path.exists(keys)
+    assert "+voicerecord" in open(keys, encoding="utf-8").read()
+    for rel in [
+        ("local", "cfg", "cs2_user_convars_0_slot0.vcfg"),
+        ("local", "cfg", "cs2_video.txt"),
+        ("remote", "cs2_user_keys.vcfg"),
+        ("remote", "cfg", "cs2_preferred_items.txt"),
+    ]:
+        assert os.path.exists(os.path.join(dst, *rel)), rel
+
+
+def test_copy_excludes_cloud_ledger(tmp_path):
+    _rich_source(tmp_path)
+    ctrl, _ = _make_controller(tmp_path, SRC_SID)
+    ctrl.seed_cs2_config_if_new(DST_SID)
+
+    dst = Cs2ConfigGateway().config_dir(str(tmp_path), DST_SID)
+    # Carrying these over is what lets the cloud overwrite the seeded config.
+    assert not os.path.exists(os.path.join(dst, "remotecache.vdf"))
+    assert not os.path.exists(
+        os.path.join(dst, "local", "cfg", "cs2_user_keys_0_slot0.vcfg_lastclouded")
+    )
+
+
+def test_seeding_disables_cs2_cloud_on_target(tmp_path):
+    _rich_source(tmp_path)
+    ctrl, _ = _make_controller(tmp_path, SRC_SID)
+    assert ctrl.seed_cs2_config_if_new(DST_SID) is True
+    assert Cs2CloudGateway().is_cloud_enabled(str(tmp_path), DST_SID) is False
+
+
+def test_cloud_left_alone_when_setting_off(tmp_path):
+    _rich_source(tmp_path)
+    ctrl, _ = _make_controller(tmp_path, SRC_SID, disable_cloud=False)
+    assert ctrl.seed_cs2_config_if_new(DST_SID) is True
+    assert Cs2CloudGateway().is_cloud_enabled(str(tmp_path), DST_SID) is True
+
+
+def test_manual_override_also_pins_config(tmp_path):
+    _rich_source(tmp_path)
+    ctrl, _ = _make_controller(tmp_path, SRC_SID)
+    assert ctrl.apply_cs2_config(DST_SID) is True
+    assert Cs2CloudGateway().is_cloud_enabled(str(tmp_path), DST_SID) is False
+
+
+def test_token_add_pins_config(tmp_path):
+    _rich_source(tmp_path)
+    ctrl, _ = _make_controller(tmp_path, SRC_SID)
+    assert ctrl.perform_token_login(_token_for(DST_SID)) is True
+    assert Cs2CloudGateway().is_cloud_enabled(str(tmp_path), DST_SID) is False

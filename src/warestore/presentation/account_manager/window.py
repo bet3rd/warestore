@@ -218,6 +218,7 @@ class MainWindow(QMainWindow):
         su.cb_cs2.toggled.connect(self._settings_coord.on_cs2_toggle)
         su.le_opts.textChanged.connect(self._settings_coord.on_opts_change)
         su.cb_workshop.toggled.connect(self._settings_coord.on_workshop_toggle)
+        su.cb_cs2_cloud.toggled.connect(self._settings_coord.on_cs2_cloud_toggle)
         su.cb_remote_play.toggled.connect(self._settings_coord.on_remote_play_toggle)
         su.btn_clean_userdata.clicked.connect(self._settings_coord.on_clean_userdata)
         su.cb_add_only.toggled.connect(self._settings_coord.on_add_only_toggle)

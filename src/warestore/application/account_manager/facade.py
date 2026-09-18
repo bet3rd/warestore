@@ -13,6 +13,7 @@ from warestore.domain.steam.services.login_service import SteamLoginService
 from warestore.infrastructure.external.update_gateway import UpdateGateway
 from warestore.infrastructure.steam.api_key_gateway import SteamApiKeyGateway
 from warestore.infrastructure.steam.bans_gateway import SteamBansGateway
+from warestore.infrastructure.steam.cs2_cloud_gateway import Cs2CloudGateway
 from warestore.infrastructure.steam.cs2_config_gateway import Cs2ConfigGateway
 from warestore.infrastructure.steam.crypto_gateway import SteamCryptoGateway
 from warestore.infrastructure.steam.gcpd_scrape_gateway import Cs2RankScrapeGateway
@@ -43,6 +44,7 @@ class AccountManagerFacade:
         self.cs2_rank = Cs2RankScrapeGateway()
         self.api_key = SteamApiKeyGateway()
         self.cs2_config = Cs2ConfigGateway()
+        self.cs2_cloud = Cs2CloudGateway()
         self.userdata = UserdataGateway()
         self.steam_login = SteamLoginService(
             process=SteamProcessGateway(),

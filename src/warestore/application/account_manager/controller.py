@@ -136,9 +136,25 @@ class AccountManagerController:
         # Config folder is seeded once (launch options are handled separately, on
         # every switch — see apply_source_launch_options).
         if self._facade.cs2_config.copy_config(steam_dir, source, target_steam_id):
+            self._pin_cs2_config(steam_dir, target_steam_id)
             self._facade.metadata.set_cs2_seeded(target_steam_id, True)
             return True
         return False
+
+    def _pin_cs2_config(self, steam_dir: str, target_steam_id: str) -> None:
+        """Stop Steam Cloud from overwriting a freshly copied CS2 config.
+
+        Without this the account's own cloud copy wins on the next launch and
+        the seeded binds/convars are silently reverted. Opt-out via the
+        ``cs2_disable_cloud`` setting. Best-effort: a failure here leaves the
+        copied config in place, just unprotected.
+        """
+        if not self.load_settings().get("cs2_disable_cloud", True):
+            return
+        try:
+            self._facade.cs2_cloud.set_cloud_enabled(steam_dir, target_steam_id, False)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Could not disable CS2 cloud sync: {exc}")
 
     def apply_cs2_config(self, target_steam_id: str) -> bool:
         """Force-copy the source CS2 config into a target, overriding any existing.
@@ -155,6 +171,7 @@ class AccountManagerController:
             return False
         if self._facade.cs2_config.copy_config(steam_dir, source, target_steam_id):
             self._facade.steam_login.copy_cs2_launch_options(steam_dir, source, target_steam_id)
+            self._pin_cs2_config(steam_dir, target_steam_id)
             self._facade.metadata.set_cs2_seeded(target_steam_id, True)
             return True
         return False

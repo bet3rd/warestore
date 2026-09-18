@@ -21,6 +21,7 @@ class SettingsRepository:
         "add_account_only": False,
         "spoof_on_login": False,
         "cs2_config_source_sid": "",
+        "cs2_disable_cloud": True,
         "exclude_from_capture": True,
         "dpi_scale": 100,
         "steam_api_key": "",

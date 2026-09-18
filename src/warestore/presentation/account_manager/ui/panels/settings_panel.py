@@ -83,6 +83,7 @@ class SettingsPanel:
         self.cb_cs2 = QCheckBox("Open CS2 on Login")
         self.le_opts = QLineEdit()
         self.cb_workshop = QCheckBox("Auto-disable Workshop maps on switch")
+        self.cb_cs2_cloud = QCheckBox("Disable CS2 Cloud on copied configs")
         self.cb_remote_play = QCheckBox("Disable Remote Play on login")
         self.cb_add_only = QCheckBox("Add account only (don't open Steam)")
         self.cb_spoof = QCheckBox("Run HWID spoofer on login")
@@ -191,6 +192,17 @@ class SettingsPanel:
             "mount them. Nothing is unsubscribed — it's reversible."
         )
         layout.addWidget(self.cb_workshop)
+
+        self.cb_cs2_cloud.setChecked(self._settings.get("cs2_disable_cloud", True))
+        self.cb_cs2_cloud.setToolTip(
+            "After copying a CS2 config onto an account, turn Steam Cloud off\n"
+            "for CS2 on that account. Without this, the account's own cloud\n"
+            "copy is restored on the next launch and the copied binds and\n"
+            "settings are silently reverted.\n"
+            "Trade-off: that account's CS2 config no longer follows it to\n"
+            "another PC."
+        )
+        layout.addWidget(self.cb_cs2_cloud)
 
         self.cb_remote_play.setChecked(self._settings.get("disable_remote_play", True))
         self.cb_remote_play.setToolTip(

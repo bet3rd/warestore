@@ -140,6 +140,10 @@ class SettingsCoordinator:
         self._settings["disable_workshop"] = checked
         self._ctrl.save_settings(self._settings)
 
+    def on_cs2_cloud_toggle(self, checked: bool) -> None:
+        self._settings["cs2_disable_cloud"] = checked
+        self._ctrl.save_settings(self._settings)
+
     def on_remote_play_toggle(self, checked: bool) -> None:
         self._settings["disable_remote_play"] = checked
         self._ctrl.save_settings(self._settings)
