@@ -81,8 +81,8 @@ class SwitchWorker(QThread):
                     self.status.emit(f"Disabled {disabled} Workshop item(s).")
         # Seed this account's CS2 config from the chosen source account the first
         # time we log into it natively (Steam is closed here, so the folder is in
-        # place before CS2 next launches). Token-login adds are seeded later, on
-        # their first native switch.
+        # place before CS2 next launches). Token-login adds seed inside
+        # perform_token_login instead, where the SteamID comes from the token.
         if self.mode == "native" and self.acc:
             try:
                 if self._ctrl.seed_cs2_config_if_new(self.acc["steamid"]):

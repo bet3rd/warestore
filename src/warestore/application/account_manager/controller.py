@@ -60,7 +60,32 @@ class AccountManagerController:
         )
 
     def perform_token_login(self, raw_token: str, disable_remote_play: bool = False) -> bool:
-        return self._facade.steam_login.perform_token_login(raw_token, disable_remote_play)
+        ok = self._facade.steam_login.perform_token_login(raw_token, disable_remote_play)
+        if ok:
+            self.seed_cs2_for_token(raw_token)
+        return ok
+
+    def seed_cs2_for_token(self, raw_token: str) -> bool:
+        """Seed a freshly added token account's CS2 config + launch options.
+
+        A native switch seeds from ``acc["steamid"]``, but a token *add* has no
+        account record yet — the SteamID comes from the token's ``sub`` claim
+        instead. Called for every token add (single and bulk) so an added
+        account gets the source config immediately, rather than only on its
+        first switch. Seeding must never break a login, so failures are logged
+        and swallowed.
+        """
+        try:
+            jwt = self._facade.parser.jwt_from_entry(raw_token)
+            steam_id = self._facade.jwt.decode_steam_id(jwt)
+            if not steam_id:
+                return False
+            seeded = self.seed_cs2_config_if_new(steam_id)
+            self.apply_source_launch_options(steam_id)
+            return seeded
+        except Exception as exc:  # noqa: BLE001 - seeding is best-effort
+            logger.warning(f"CS2 config seeding skipped for added account: {exc}")
+            return False
 
     def switch_account(
         self, acc: dict, persona_state: int = 7, disable_remote_play: bool = False
