@@ -1,14 +1,26 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 bet3rd
 
-from PyQt5.QtCore import QPointF, QRectF, QSize, Qt
-from PyQt5.QtGui import QBrush, QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+import os
+
+from PyQt5.QtCore import QPointF, QRectF, QSize, Qt, QUrl
+from PyQt5.QtGui import (
+    QBrush,
+    QColor,
+    QDesktopServices,
+    QIcon,
+    QPainter,
+    QPen,
+    QPixmap,
+    QPolygonF,
+)
 from PyQt5.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -220,6 +232,9 @@ class MainPanel:
         # Always start with the log panel closed, regardless of last session.
         self._btn_log.setChecked(False)
         self._btn_log.setToolTip("Toggle log panel")
+        # Right-click offers console actions without stealing the left-click toggle.
+        self._btn_log.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._btn_log.customContextMenuRequested.connect(self._show_log_menu)
         status_layout.addWidget(self._btn_log)
         self._btn_cs2_ranks = QPushButton()
         self._btn_cs2_ranks.setObjectName("gear")
@@ -362,6 +377,29 @@ class MainPanel:
         elif not busy and prev and self.info_label.text() == prev:
             self.info_label.setText("")
         return prev if not busy else None
+
+    def _show_log_menu(self, pos) -> None:
+        """Right-click menu on the log toggle: clear the on-screen console, or
+        open the persistent log file on disk. Clearing the console deliberately
+        leaves the file alone -- surviving a clear is the point of the file."""
+        from warestore.presentation.account_manager.support.app_log import app_log
+        from warestore.presentation.account_manager.support.logging_setup import (
+            log_file_path,
+        )
+
+        path = log_file_path()
+        menu = QMenu(self._btn_log)
+        act_clear = menu.addAction("Clear console")
+        act_open = menu.addAction("Open Log File")
+        # Nothing to open until the first record creates the file.
+        act_open.setEnabled(os.path.exists(path))
+
+        chosen = menu.exec_(self._btn_log.mapToGlobal(pos))
+        if chosen == act_clear:
+            app_log.clear()
+            self._log_panel.clear()
+        elif chosen == act_open:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def refresh_log(self) -> None:
         if not self._log_panel.isVisible():
