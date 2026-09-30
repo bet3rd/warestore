@@ -9,12 +9,22 @@ import logging
 from collections.abc import Callable
 
 from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMessageBox, QWidget
+from PyQt5.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QInputDialog,
+    QLineEdit,
+    QMessageBox,
+    QWidget,
+)
 
 from warestore.application.account_manager.controller import AccountManagerController
 from warestore.infrastructure.persistence import vault_crypto
 from warestore.presentation.account_manager.support import vault_unlock
 from warestore.presentation.account_manager.support.vault_unlock import prompt_new_password
+from warestore.presentation.account_manager.ui.color_picker import ColorPickerPopover
+from warestore.presentation.account_manager.ui.theme import apply_accent
+from warestore.presentation.account_manager.ui.theme.accent import normalize_accent
 from warestore.presentation.account_manager.ui.dialogs import (
     UpdateDialog,
     UserdataCleanupDialog,
@@ -54,6 +64,7 @@ class SettingsCoordinator:
         set_log_visible: Callable[[bool], None],
         toggle_settings_open: Callable[[], None],
         apply_capture_exclusion: Callable[[], None],
+        refresh_accent: Callable[[], None],
     ) -> None:
         self._parent = parent
         self._ctrl = controller
@@ -67,6 +78,7 @@ class SettingsCoordinator:
         self._set_log_visible = set_log_visible
         self._toggle_settings = toggle_settings_open
         self._apply_capture_exclusion = apply_capture_exclusion
+        self._refresh_accent = refresh_accent
         self._bulk_worker: BulkImportWorker | None = None
         self._bulk_rejected_count = 0
         self._update_notice_shown = False
@@ -106,6 +118,29 @@ class SettingsCoordinator:
         # accounts) via load_accounts, and refreshes the grid.
         if checked:
             self._reload_accounts()
+
+    # --- accent colour ---
+
+    def on_accent_pick(self, accent: str) -> None:
+        accent = normalize_accent(accent)
+        self._apply_accent(accent)
+        self._ui.set_accent(accent)
+        self._settings["accent_color"] = accent
+        self._ctrl.save_settings(self._settings)
+
+    def on_accent_custom(self) -> None:
+        saved = normalize_accent(self._settings.get("accent_color"))
+        popover = ColorPickerPopover(saved, self._parent)
+        # Fires once per finished drag (a restyle costs tens of ms), not per move.
+        popover.colorChanged.connect(self._apply_accent)
+        popover.accepted.connect(self.on_accent_pick)
+        popover.rejected.connect(lambda: self._apply_accent(saved))
+        popover.popup_below(self._ui.btn_accent_custom)
+
+    def _apply_accent(self, accent: str) -> None:
+        apply_accent(QApplication.instance(), accent)
+        self._ui.refresh_accent()
+        self._refresh_accent()
 
     def on_dpi_scale_change(self, _index: int) -> None:
         scale = self._ui.cmb_dpi.currentData()

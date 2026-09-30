@@ -34,6 +34,7 @@ from warestore import __version__
 from warestore.presentation.account_manager.ui.accounts import AccountGrid
 from warestore.presentation.account_manager.ui.chrome import HeaderBar
 from warestore.presentation.account_manager.ui.section import SectionLabel
+from warestore.presentation.account_manager.ui.theme import accent
 
 
 def _rank_bars_icon() -> QIcon:
@@ -65,7 +66,7 @@ def _funnel_icon(active: bool) -> QIcon:
     painter.setRenderHint(QPainter.Antialiasing)
     points = [(2.5, 3), (13.5, 3), (9.2, 8.5), (9.2, 13), (6.8, 13), (6.8, 8.5)]
     poly = QPolygonF([QPointF(x, y) for x, y in points])
-    color = QColor("#cc4444") if active else QColor("#8f8f8f")
+    color = QColor(accent.current().bright) if active else QColor("#8f8f8f")
     painter.setPen(QPen(color, 1.4))
     painter.setBrush(QBrush(color) if active else Qt.NoBrush)
     painter.drawPolygon(poly)
@@ -103,6 +104,7 @@ class MainPanel:
         self._token_err = QLabel("")
         self._search = QLineEdit()
         self._btn_filter = QPushButton()
+        self._filter_active = False
         self.account_grid = AccountGrid()
         self._grid_scroll = QScrollArea()
         self._scroll_content = QWidget()
@@ -267,7 +269,12 @@ class MainPanel:
         self._body = body
 
     def set_filter_active(self, active: bool) -> None:
+        self._filter_active = active
         self._btn_filter.setIcon(_funnel_icon(active))
+
+    def refresh_accent(self) -> None:
+        """Re-render icons that bake the accent colour in."""
+        self.set_filter_active(self._filter_active)
 
     def paste_token(self) -> str:
         text = QApplication.clipboard().text().strip()

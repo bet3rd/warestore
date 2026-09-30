@@ -16,7 +16,7 @@ from warestore.presentation.account_manager.support.single_instance import (
     activate_existing_instance,
 )
 from warestore.presentation.account_manager.support.vault_unlock import setup_or_unlock_vault
-from warestore.presentation.account_manager.ui.theme import QSS, app_icon
+from warestore.presentation.account_manager.ui.theme import app_icon, apply_accent
 from warestore.application.account_manager.bootstrap import create_account_manager_app
 from warestore.presentation.account_manager.window import MainWindow
 
@@ -102,6 +102,13 @@ def _apply_interface_scale() -> None:
         os.environ["QT_SCALE_FACTOR"] = str(scale / 100)
 
 
+def _saved_accent() -> str:
+    try:
+        return SettingsRepository().load().get("accent_color", "")
+    except Exception:  # noqa: BLE001 - never block startup; falls back to the default
+        return ""
+
+
 def main() -> None:
     _make_streams_unicode_safe()
     # Atomic single-instance gate — taken before any UI (including the vault
@@ -121,7 +128,7 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setPalette(_dark_palette())
-    app.setStyleSheet(QSS)
+    apply_accent(app, _saved_accent())
     app.setFont(QFont("Segoe UI", 10))
     app.setQuitOnLastWindowClosed(False)
 

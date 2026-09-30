@@ -4,6 +4,7 @@
 from warestore.presentation.account_manager.ui.theme.styles import (
     QSS,
     app_icon,
+    apply_accent,
     app_icon_path,
     enable_dark_title_bar,
     ensure_app_icon_file,
@@ -23,6 +24,7 @@ from warestore.presentation.account_manager.ui.theme.capture import (
 __all__ = [
     "QSS",
     "app_icon",
+    "apply_accent",
     "app_icon_path",
     "enable_dark_title_bar",
     "ensure_app_icon_file",

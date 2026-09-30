@@ -45,7 +45,7 @@ QCheckBox::indicator {
     background: #1e1e1e;
 }
 QCheckBox::indicator:hover   { border: 1px solid #606060; }
-QCheckBox::indicator:checked { background: #880808; border: 1px solid #aa1010; }
+QCheckBox::indicator:checked { background: @accent; border: 1px solid @accent-border; }
 QCheckBox:disabled { color: #444444; }
 QPlainTextEdit {
     background: #1a1a1a;
@@ -55,9 +55,9 @@ QPlainTextEdit {
     font-family: Consolas, "Courier New", monospace;
     font-size: 11px;
     padding: 6px 8px;
-    selection-background-color: #880808;
+    selection-background-color: @accent;
 }
-QPlainTextEdit:focus { border: 1px solid #880808; }
+QPlainTextEdit:focus { border: 1px solid @accent; }
 QPlainTextEdit#log {
     background: #161616;
     color: #888888;

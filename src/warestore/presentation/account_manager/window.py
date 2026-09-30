@@ -151,6 +151,7 @@ class MainWindow(QMainWindow):
             set_log_visible=self._ui.set_log_visible,
             toggle_settings_open=self._open_settings,
             apply_capture_exclusion=self.apply_capture_exclusion,
+            refresh_accent=self._ui.refresh_accent,
         )
         self._cooldowns = CooldownCoordinator(
             self,
@@ -235,6 +236,9 @@ class MainWindow(QMainWindow):
             self._settings_coord.on_gcpd_check_toggle
         )
         su.cmb_dpi.currentIndexChanged.connect(self._settings_coord.on_dpi_scale_change)
+        for swatch in [*su.accent_swatches, su.accent_custom_swatch]:
+            swatch.clicked.connect(self._settings_coord.on_accent_pick)
+        su.btn_accent_custom.clicked.connect(self._settings_coord.on_accent_custom)
         su.cb_exclude_capture.toggled.connect(
             self._settings_coord.on_exclude_from_capture_toggle
         )

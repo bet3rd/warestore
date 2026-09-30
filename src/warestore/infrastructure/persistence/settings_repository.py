@@ -24,6 +24,7 @@ class SettingsRepository:
         "cs2_disable_cloud": True,
         "exclude_from_capture": True,
         "dpi_scale": 100,
+        "accent_color": "#880808",
         "steam_api_key": "",
         "vault_setup_done": False,
         "vault_mode": "dpapi",

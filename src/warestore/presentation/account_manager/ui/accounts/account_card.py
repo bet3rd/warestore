@@ -40,6 +40,7 @@ from warestore.domain.accounts.cooldown import (
 )
 from warestore.domain.accounts.friend_code import friend_code_for_steamid
 from warestore.domain.auth.formatters import JWT_NO_TOKEN, format_jwt_expiry_label
+from warestore.presentation.account_manager.ui.theme import accent
 from warestore.presentation.account_manager.ui.accounts.account_card_menu import (
     show_account_card_menu,
 )
@@ -181,8 +182,6 @@ class AccountCard(QWidget):
 
     _BASE_R, _BASE_G, _BASE_B = 0x1E, 0x1E, 0x1E
     _HOV_R, _HOV_G, _HOV_B = 0x2E, 0x2A, 0x2A
-    _SEL_BG = QColor("#261a1a")
-    _SEL_BORDER = QColor("#cc1111")
 
     clicked = pyqtSignal(object, object)
     double_clicked = pyqtSignal(object)
@@ -655,7 +654,7 @@ class AccountCard(QWidget):
         rect = QRectF(1.5, 1.5, self.width() - 3, self.height() - 3)
         path = QPainterPath()
         path.addRoundedRect(rect, self.RADIUS, self.RADIUS)
-        bg = self._SEL_BG if self._sel else self._lerp_bg()
+        bg = QColor(accent.current().sel_bg) if self._sel else self._lerp_bg()
         painter.fillPath(path, QBrush(bg))
         if self._color:
             tag = QColor(self._color)
@@ -665,7 +664,7 @@ class AccountCard(QWidget):
                 tag.setAlpha(48)
                 painter.fillPath(path, QBrush(tag))
         if self._sel:
-            painter.setPen(QPen(self._SEL_BORDER, 1.5))
+            painter.setPen(QPen(QColor(accent.current().sel_border), 1.5))
             painter.drawPath(path)
 
         # status dot (top-right)

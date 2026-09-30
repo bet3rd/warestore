@@ -28,7 +28,7 @@ QComboBox {
     min-height: 20px;
 }
 QComboBox:hover { border: 1px solid #383838; }
-QComboBox:focus { border: 1px solid #880808; }
+QComboBox:focus { border: 1px solid @accent; }
 QComboBox::drop-down {
     border: none;
     width: 26px;
@@ -41,7 +41,7 @@ QComboBox QAbstractItemView {
     background: #1e1e1e;
     color: #e0e0e0;
     border: 1px solid #2e2e2e;
-    selection-background-color: #880808;
+    selection-background-color: @accent;
     outline: none;
 }
 QDoubleSpinBox, QSpinBox {
@@ -54,7 +54,7 @@ QDoubleSpinBox, QSpinBox {
     min-height: 20px;
 }
 QDoubleSpinBox:hover, QSpinBox:hover { border: 1px solid #383838; }
-QDoubleSpinBox:focus, QSpinBox:focus { border: 1px solid #880808; }
+QDoubleSpinBox:focus, QSpinBox:focus { border: 1px solid @accent; }
 QPushButton#dialog_btn {
     min-height: 0;
     padding: 0;

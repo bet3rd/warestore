@@ -4,7 +4,7 @@
 import sys
 
 from PyQt5.QtCore import QRectF, Qt, pyqtSignal
-from PyQt5.QtGui import QBrush, QColor, QPainter, QPainterPath, QPalette, QPixmap
+from PyQt5.QtGui import QBrush, QColor, QPainter, QPainterPath, QPixmap
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -20,7 +20,14 @@ from PyQt5.QtWidgets import (
 )
 
 from warestore.presentation.account_manager.ui.chrome import HeaderBar, RoundedPanel
+from warestore.presentation.account_manager.ui.color_picker import ColorSwatch
 from warestore.presentation.account_manager.ui.section import SectionLabel
+from warestore.presentation.account_manager.ui.theme import accent
+from warestore.presentation.account_manager.ui.theme.accent import (
+    ACCENT_PRESETS,
+    DEFAULT_ACCENT,
+    normalize_accent,
+)
 
 
 def _warning_icon(px: int = 14) -> QPixmap:
@@ -94,6 +101,9 @@ class SettingsPanel:
         self.cb_gcpd_on_launch = QCheckBox("Fetch CS2 ranks on launch")
         self.cb_exclude_capture = QCheckBox("Hide from screen capture (Discord, OBS)")
         self.cmb_dpi = QComboBox()
+        self.accent_swatches = [ColorSwatch(hx, name) for name, hx in ACCENT_PRESETS]
+        self.accent_custom_swatch = ColorSwatch(DEFAULT_ACCENT, "Custom")
+        self.btn_accent_custom = QPushButton("Custom…")
         self.le_api_key = QLineEdit()
         self.lbl_api_status = QLabel("")
         self.btn_master = QPushButton()
@@ -120,6 +130,28 @@ class SettingsPanel:
             self._settings.get("spoof_on_login", False) if installed else False
         )
         self.cb_spoof.blockSignals(False)
+
+    def refresh_accent(self) -> None:
+        """Re-colour the rich-text link. The colour is inline because a restyle
+        restores the label's polished palette, so a QPalette.Link set on it
+        (or app-wide) doesn't stick."""
+        self._api_hint.setText(
+            "Steam Web API key enables VAC/game/trade ban badges on cards. "
+            'Get one free at <a href="https://steamcommunity.com/dev/apikey" '
+            f'style="color: {accent.current().bright};">'
+            "steamcommunity.com/dev/apikey</a>."
+        )
+
+    def set_accent(self, color: str) -> None:
+        """Ring the matching swatch; a non-preset colour shows as a 7th swatch."""
+        color = normalize_accent(color)
+        is_preset = any(sw.color == color for sw in self.accent_swatches)
+        for sw in self.accent_swatches:
+            sw.set_selected(sw.color == color)
+        if not is_preset:
+            self.accent_custom_swatch.set_color(color)
+        self.accent_custom_swatch.setVisible(not is_preset)
+        self.accent_custom_swatch.set_selected(not is_preset)
 
     def _add_separator(self, layout) -> None:
         """Section divider with more room above than below, so each section
@@ -236,12 +268,7 @@ class SettingsPanel:
         # Quiet inline link so the row stays the same height as the other
         # checkboxes (a real button would make this row taller and break rhythm).
         self.btn_install_spoofer.setFlat(True)
-        self.btn_install_spoofer.setStyleSheet(
-            "QPushButton { background: transparent; border: none; color: #cc4444;"
-            " font-size: 12px; padding: 0; min-height: 0; }"
-            "QPushButton:hover { color: #e46060; }"
-            "QPushButton:disabled { color: #6a3030; }"
-        )
+        self.btn_install_spoofer.setObjectName("link")  # accent-coloured, styled in base.qss
         self.btn_install_spoofer.setCursor(Qt.PointingHandCursor)
         self.btn_install_spoofer.setToolTip(
             "Downloads the HWID spoofer from the spoofer repo into your\n"
@@ -327,6 +354,22 @@ class SettingsPanel:
         dpi_hint.setWordWrap(True)
         layout.addWidget(dpi_hint)
 
+        accent_row = QHBoxLayout()
+        accent_row.setContentsMargins(0, 0, 0, 0)
+        accent_row.setSpacing(2)
+        accent_row.addWidget(QLabel("Accent color"))
+        accent_row.addStretch()
+        for swatch in [*self.accent_swatches, self.accent_custom_swatch]:
+            accent_row.addWidget(swatch, 0, Qt.AlignVCenter)
+        accent_row.addSpacing(6)
+        self.btn_accent_custom.setObjectName("secondary")
+        self.btn_accent_custom.setFixedSize(64, 24)
+        self.btn_accent_custom.setStyleSheet("min-height: 0; padding: 0; font-size: 11px;")
+        self.btn_accent_custom.setToolTip("Pick any color")
+        accent_row.addWidget(self.btn_accent_custom)
+        layout.addLayout(accent_row)
+        self.set_accent(self._settings.get("accent_color", DEFAULT_ACCENT))
+
         self._add_separator(layout)
 
         checks_hdr = QHBoxLayout()
@@ -337,19 +380,14 @@ class SettingsPanel:
         checks_hdr.addWidget(self.lbl_api_status)
         layout.addLayout(checks_hdr)
 
-        api_hint = QLabel(
-            "Steam Web API key enables VAC/game/trade ban badges on cards. "
-            'Get one free at <a href="https://steamcommunity.com/dev/apikey">'
-            "steamcommunity.com/dev/apikey</a>."
-        )
+        api_hint = QLabel()
         api_hint.setObjectName("info")
         api_hint.setWordWrap(True)
         api_hint.setTextFormat(Qt.RichText)
         api_hint.setTextInteractionFlags(Qt.TextBrowserInteraction)
         api_hint.setOpenExternalLinks(True)
-        link_pal = api_hint.palette()
-        link_pal.setColor(QPalette.Link, QColor("#cc4444"))
-        api_hint.setPalette(link_pal)
+        self._api_hint = api_hint
+        self.refresh_accent()
         layout.addWidget(api_hint)
 
         self.le_api_key.setPlaceholderText("Steam Web API key (optional)")

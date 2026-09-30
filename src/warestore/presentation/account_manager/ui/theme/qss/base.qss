@@ -65,18 +65,18 @@ QLineEdit {
     border-radius: 6px;
     padding: 7px 10px;
     font-size: 12px;
-    selection-background-color: #880808;
+    selection-background-color: @accent;
 }
 QLineEdit:focus {
-    border: 1px solid #880808;
+    border: 1px solid @accent;
     background: #202020;
 }
 QLineEdit:hover {
     border: 1px solid #383838;
 }
 QPushButton {
-    background: #880808;
-    color: #ffffff;
+    background: @accent;
+    color: @on-accent;
     border: none;
     border-radius: 6px;
     padding: 8px 0;
@@ -84,9 +84,9 @@ QPushButton {
     font-weight: bold;
     min-height: 32px;
 }
-QPushButton:hover    { background: #a00a0a; }
-QPushButton:pressed  { background: #660606; }
-QPushButton:disabled { background: #3a1616; color: #6a3030; }
+QPushButton:hover    { background: @accent-hover; }
+QPushButton:pressed  { background: @accent-pressed; }
+QPushButton:disabled { background: @accent-disabled-bg; color: @accent-disabled-text; }
 QPushButton#secondary {
     background: #1e1e1e;
     color: #909090;
@@ -95,6 +95,16 @@ QPushButton#secondary {
 }
 QPushButton#secondary:hover  { background: #262626; border: 1px solid #424242; color: #c0c0c0; }
 QPushButton#secondary:pressed { background: #181818; }
+QPushButton#link {
+    background: transparent;
+    border: none;
+    color: @accent-bright;
+    font-size: 12px;
+    padding: 0;
+    min-height: 0;
+}
+QPushButton#link:hover    { background: transparent; color: @accent-bright-hover; }
+QPushButton#link:disabled { background: transparent; color: @accent-disabled-text; }
 QScrollArea, QScrollArea > QWidget, QScrollArea > QWidget > QWidget {
     background: transparent;
     border: none;

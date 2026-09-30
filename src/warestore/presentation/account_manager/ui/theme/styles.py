@@ -5,6 +5,14 @@ import ctypes
 import sys
 from pathlib import Path
 
+from warestore.presentation.account_manager.ui.theme.accent import (
+    DEFAULT_ACCENT,
+    AccentShades,
+    accent_shades,
+    render_qss,
+    set_current,
+)
+
 
 def _qss_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -25,7 +33,25 @@ def _load_qss() -> str:
     return "\n\n".join(parts) + "\n"
 
 
-QSS = _load_qss()
+QSS_TEMPLATE = _load_qss()
+QSS = render_qss(QSS_TEMPLATE, accent_shades(DEFAULT_ACCENT))
+
+
+def apply_accent(app, accent: str) -> AccentShades:
+    """Recolour the running app: stylesheet, selection/link palette, and a
+    repaint so painted widgets pick up ``accent.current()``."""
+    from PyQt5.QtGui import QColor, QPalette
+
+    shades = set_current(accent)
+    pal = app.palette()
+    pal.setColor(QPalette.Highlight, QColor(shades.base))
+    pal.setColor(QPalette.HighlightedText, QColor(shades.on_accent))
+    pal.setColor(QPalette.Link, QColor(shades.bright))
+    app.setPalette(pal)
+    app.setStyleSheet(render_qss(QSS_TEMPLATE, shades))
+    for widget in app.topLevelWidgets():
+        widget.update()
+    return shades
 
 
 def project_root() -> Path:
