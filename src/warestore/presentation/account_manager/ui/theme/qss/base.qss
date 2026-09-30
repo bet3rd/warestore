@@ -13,6 +13,11 @@ QLabel#title {
     font-size: 17px;
     font-weight: bold;
 }
+QLabel#title_version {
+    color: #686868;
+    font-size: 11px;
+    padding-top: 4px;
+}
 QLabel#section {
     color: #505050;
     font-size: 10px;

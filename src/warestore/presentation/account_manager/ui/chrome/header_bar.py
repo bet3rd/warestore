@@ -13,6 +13,7 @@ class HeaderBar(QWidget):
         on_close,
         show_minimize: bool = True,
         draggable: bool = True,
+        version: str | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -28,6 +29,12 @@ class HeaderBar(QWidget):
         label.setObjectName("title")
         label.setAttribute(Qt.WA_TransparentForMouseEvents)
         layout.addWidget(label)
+        if version:
+            version_label = QLabel(f"v{version}")
+            version_label.setObjectName("title_version")
+            version_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+            layout.addSpacing(6)
+            layout.addWidget(version_label)
         layout.addStretch()
 
         if show_minimize:

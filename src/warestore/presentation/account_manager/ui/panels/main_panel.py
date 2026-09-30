@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from warestore import __version__
 from warestore.presentation.account_manager.ui.accounts import AccountGrid
 from warestore.presentation.account_manager.ui.chrome import HeaderBar
 from warestore.presentation.account_manager.ui.section import SectionLabel
@@ -137,6 +138,7 @@ class MainPanel:
             "WareStore Account Manager",
             on_minimize=self._on_minimize,
             on_close=self._on_close,
+            version=__version__,
         )
         root.addWidget(header)
 
