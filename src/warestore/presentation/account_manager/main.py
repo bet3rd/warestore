@@ -10,6 +10,10 @@ from PyQt5.QtWidgets import QApplication
 
 from warestore.infrastructure.persistence import SettingsRepository
 from warestore.presentation.account_manager.support.app_log import app_log
+from warestore.presentation.account_manager.support.dpi import (
+    migrate_interface_scale,
+    scale_factor_env,
+)
 from warestore.presentation.account_manager.support.logging_setup import configure_logging
 from warestore.presentation.account_manager.support.single_instance import (
     acquire_single_instance_lock,
@@ -91,15 +95,26 @@ def _dark_palette() -> QPalette:
 
 
 def _apply_interface_scale() -> None:
-    """Set QT_SCALE_FACTOR from the saved interface scale BEFORE QApplication is
-    created — Qt only reads it at construction, so a scale change needs a restart
-    (surfaced in Settings). 100 (%) is the default and applies no scaling."""
+    """Follow Windows' per-monitor scale, with the saved Interface scale on top.
+
+    Both must be set BEFORE QApplication is created (Qt reads them once), so an
+    Interface scale change needs a restart (surfaced in Settings). See
+    ``support/dpi.py`` for the one-time reset of the old setting."""
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    # Exact factors: Qt5 rounds 150% up to 200% by default.
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     try:
-        scale = int(SettingsRepository().load().get("dpi_scale", 100))
-    except (Exception, ValueError, TypeError):  # noqa: BLE001 - never block startup
+        repo = SettingsRepository()
+        settings = repo.load()
+        if migrate_interface_scale(settings):
+            repo.save(settings)
+        factor = scale_factor_env(settings)
+    except Exception:  # noqa: BLE001 - never block startup
         return
-    if scale > 0 and scale != 100:
-        os.environ["QT_SCALE_FACTOR"] = str(scale / 100)
+    if factor:
+        os.environ["QT_SCALE_FACTOR"] = factor
 
 
 def _saved_accent() -> str:

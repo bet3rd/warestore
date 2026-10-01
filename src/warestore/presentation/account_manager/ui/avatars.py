@@ -13,13 +13,17 @@ from warestore.config.settings import ACCOUNT_MANAGER_DATA_DIR
 
 
 def _dpr() -> float:
-    """Effective device-pixel ratio (interface scale); 1.0 if no app yet.
+    """Device-pixel ratio avatars render at; 1.0 if no app yet.
 
-    Avatars are rasters, so they render at this ratio (with setDevicePixelRatio)
-    to stay crisp when the interface is scaled — needs AA_UseHighDpiPixmaps.
-    """
+    Avatars are rasters rendered once (with setDevicePixelRatio, which needs
+    AA_UseHighDpiPixmaps). Monitors can scale differently and the window can
+    move between them, so this is the highest ratio of any screen: crisp on
+    the sharpest one, cleanly downscaled on the others."""
     app = QApplication.instance()
-    return float(app.devicePixelRatio()) if app is not None else 1.0
+    if app is None:
+        return 1.0
+    ratios = [s.devicePixelRatio() for s in app.screens()] or [app.devicePixelRatio()]
+    return float(max(ratios))
 
 
 try:

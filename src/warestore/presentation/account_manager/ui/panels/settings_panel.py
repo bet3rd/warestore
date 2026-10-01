@@ -305,7 +305,9 @@ class SettingsPanel:
         self.cmb_dpi.setFixedWidth(96)
         dpi_row.addWidget(self.cmb_dpi)
         layout.addLayout(dpi_row)
-        dpi_hint = QLabel("Scales the whole interface. Applies after restarting WareStore.")
+        dpi_hint = QLabel(
+            "On top of Windows' display scale. Applies after restarting WareStore."
+        )
         dpi_hint.setObjectName("info")
         dpi_hint.setWordWrap(True)
         layout.addWidget(dpi_hint)
