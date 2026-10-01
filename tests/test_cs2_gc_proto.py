@@ -97,3 +97,9 @@ def test_decode_prime_unknown_without_game_account_object():
     other = gp.encode_welcome([(gp.SO_TYPE_EQUIP_SLOT, gp.encode_equip_slot_object(ACCT, 2, 2, 61))])
     assert gp.decode_prime(other) is None
     assert gp.decode_prime(b"") is None
+
+
+def test_account_profile_carries_the_penalty_reason():
+    buf = gp._vfield(1, ACCT) + gp._vfield(4, 600) + gp._vfield(5, 10)
+    prof = gp.decode_account_profile(buf)
+    assert prof.cooldown_seconds == 600 and prof.penalty_reason == 10

@@ -67,6 +67,9 @@ class FakeSession:
     def cooldown_seconds(self):
         return self._step("cooldown_seconds", 0)
 
+    def cooldown_reason(self):
+        return self.script.get("cooldown_reason", 0)
+
     def gcpd_rank(self):
         return self._step("gcpd_rank", None)
 
@@ -455,3 +458,30 @@ def test_gc_level_skips_the_gcpd_level_fetch(svc):
     service, _ = svc
     service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
     assert "gcpd_level" not in FakeSession.last.calls
+
+
+def test_gcpd_never_beats_a_long_gc_cooldown(svc):
+    """Live: banned accounts get a ~1-year 9110 penalty while GCPD says
+    "Never" — the permanent one must win, or a ban shows as a cooldown."""
+    service, meta = svc
+    FakeSession.script = {
+        "cooldown_seconds": 28_971_955, "cooldown_reason": 10,
+        "gcpd_rank": Cs2Rank(cooldown_expires_unix=COOLDOWN_PERMANENT),
+    }
+    result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert result.cooldown_expires == COOLDOWN_PERMANENT
+    assert meta.calls[-1][1]["cooldown_expires"] == COOLDOWN_PERMANENT
+
+
+def test_permanent_penalty_reason_without_gcpd_is_permanent(svc):
+    service, _ = svc
+    FakeSession.script = {"cooldown_seconds": 30_837_845, "cooldown_reason": 10}
+    result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert result.cooldown_expires == COOLDOWN_PERMANENT
+
+
+def test_ordinary_penalty_stays_timed(svc):
+    service, _ = svc
+    FakeSession.script = {"cooldown_seconds": 502_496, "cooldown_reason": 22}
+    result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert result.cooldown_expires == 1_700_000_000 + 502_496

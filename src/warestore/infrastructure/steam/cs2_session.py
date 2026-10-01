@@ -279,6 +279,12 @@ class Cs2Session:
             return None
         return gp.decode_account_profile(self._mm_hello).cooldown_seconds
 
+    def cooldown_reason(self) -> int:
+        """The GC's penalty_reason for the cooldown (0 if none/unknown)."""
+        if self._mm_hello is None:
+            return 0
+        return gp.decode_account_profile(self._mm_hello).penalty_reason
+
     def _reenter_for_mm_hello(self) -> None:
         self._client.games_played([])
         self._client.sleep(self._budget(2.5))

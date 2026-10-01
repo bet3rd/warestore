@@ -36,6 +36,10 @@ SO_TYPE_DEFAULT_EQUIPPED = 43
 SO_TYPE_GAME_ACCOUNT = 7  # CSOEconGameAccountClient
 ELEVATED_STATE_PRIME = 5  # game-account field 14
 RANK_TYPE_PREMIER = 11
+# 9110 penalty_reason codes that mean a permanent penalty (a CS2 ban). Seen
+# live: reason 10 comes with a ~1-year penalty_seconds while GCPD shows the
+# cooldown expiring "Never".
+PERMANENT_PENALTY_REASONS = frozenset({10})
 DEFAULT_ITEM_MASK = 0xF000000000000000
 
 TEAM_T = 2
@@ -234,18 +238,21 @@ class GcProfile:
     premier_rating: int = -1  # -1 = unranked / unknown
     premier_wins: int = -1
     cooldown_seconds: int = 0  # 0 = none
+    penalty_reason: int = 0
 
 
 def decode_account_profile(buf: bytes) -> GcProfile:
     account_id = level = 0
     has_level = False
     premier_rating, premier_wins = -1, -1
-    cooldown = 0
+    cooldown = reason = 0
     for num, wt, v in iter_fields(buf):
         if num == 1:
             account_id = v
         elif num == 4:
             cooldown = max(0, _int32(v))
+        elif num == 5:
+            reason = v
         elif num == 17:
             level, has_level = v, True
         elif num in (7, 20) and wt == 2:
@@ -260,6 +267,7 @@ def decode_account_profile(buf: bytes) -> GcProfile:
         premier_rating=premier_rating,
         premier_wins=premier_wins,
         cooldown_seconds=cooldown,
+        penalty_reason=reason,
     )
 
 

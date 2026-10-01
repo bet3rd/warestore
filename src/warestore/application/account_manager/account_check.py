@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from warestore.infrastructure.steam.cs2_cm_mint import CmLogonError, TokenRejectedError
-from warestore.infrastructure.steam.cs2_gc_proto import Loadout
+from warestore.infrastructure.steam.cs2_gc_proto import PERMANENT_PENALTY_REASONS, Loadout
 from warestore.infrastructure.steam.cs2_session import (
     AccountInUseError,
     Cs2Session,
@@ -333,7 +333,17 @@ class AccountCheckService:
             str(result.wingman_rank) if result.wingman_rank > 0 else "unranked"
         )
 
-        if cooldown is not None:
+        # A permanent penalty (a CS2 ban) wins over the GC's timed number: the
+        # GC reports bans as a long countdown, GCPD as "Never".
+        permanent = (
+            (gcpd is not None and gcpd.cooldown_expires_unix >= COOLDOWN_PERMANENT)
+            or (bool(cooldown) and session.cooldown_reason() in PERMANENT_PENALTY_REASONS)
+        )
+        if permanent:
+            result.cooldown_expires = COOLDOWN_PERMANENT
+            result.cooldown_ok = True
+            cooldown_txt = "cooldown permanent (CS2 ban)"
+        elif cooldown is not None:
             result.cooldown_expires = int(self._wall_clock()) + cooldown if cooldown > 0 else 0
             result.cooldown_ok = True
             cooldown_txt = "no cooldown" if cooldown <= 0 else f"cooldown {_format_hm(cooldown)} left"
