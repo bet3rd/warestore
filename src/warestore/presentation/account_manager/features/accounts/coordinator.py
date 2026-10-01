@@ -55,6 +55,11 @@ class AccountCoordinator:
         self._filter = filter_accounts
         self._selected: dict | None = None
         self._status_worker: StatusFetchWorker | None = None
+        # Last fetched status per SteamID (online state, bans, level, persona,
+        # avatar). A reload re-applies it to the rebuilt cards and only fetches
+        # accounts missing from it; a full fetch happens on launch and when the
+        # user hits Refresh.
+        self._status_cache: dict[str, dict] = {}
 
         self._check_worker: AccountCheckWorker | None = None
         self._check_names: dict[str, str] = {}
@@ -91,7 +96,10 @@ class AccountCoordinator:
             self._grid.reapply_filters()
             self._sync_layout()
 
-    def load_accounts(self) -> None:
+    def load_accounts(self, refresh_status: bool = False) -> None:
+        """Rebuild the grid. ``refresh_status`` re-fetches every account's
+        status from Steam (launch / Refresh); otherwise only accounts that
+        have never been fetched are, and the rest keep their cached status."""
         self._selected = None
         if not self._is_switch_busy():
             self._info.setText("")
@@ -101,17 +109,33 @@ class AccountCoordinator:
             self._info.setText(result.status_message)
             return
 
+        source_cleared = self._forget_deleted_source(
+            {acc.get("steamid", "") for acc in result.accounts}
+        )
         self._grid.populate(result.accounts, result.steam_dir)
+        self._apply_statuses(self._status_cache)
         self._filter(self._get_search())
         self.apply_card_metadata()
         self._sync_layout()
 
-        if result.accounts:
+        if source_cleared:
+            self._info.setText("CS2 config source cleared — its account was removed.")
+        elif result.accounts:
             self._info.setText(result.status_message)
 
         self._on_accounts_loaded()
-        self.start_status_fetch()
+        self.start_status_fetch(full=refresh_status)
         self._refresh_log()
+
+    def _forget_deleted_source(self, listed_sids: set[str]) -> bool:
+        """Back to "no source set" once the CS2 config source account is gone
+        from the manager (not in Steam's login list and no saved token). Its
+        userdata folder is left alone. True when the source was cleared."""
+        sid = self._settings.get("cs2_config_source_sid", "")
+        if not sid or sid in listed_sids or self._ctrl.saved_token_entry(sid).get("token"):
+            return False
+        self._save_cs2_source("")
+        return True
 
     def select_accounts(self, accounts: list[dict]) -> None:
         self._selected = accounts[0] if accounts else None
@@ -232,15 +256,19 @@ class AccountCoordinator:
             self._info.setText(f"Exported {len(lines)} token(s) to {path}.{suffix}")
 
 
-    def start_status_fetch(self) -> None:
+    def _status_targets(self, *, full: bool) -> list[str]:
+        sids = self._grid.steam_ids()
+        return sids if full else [sid for sid in sids if sid not in self._status_cache]
+
+    def start_status_fetch(self, *, full: bool = True) -> None:
         if self._status_worker and self._status_worker.isRunning():
             return
-        all_sids = self._grid.steam_ids()
-        if not all_sids:
+        sids = self._status_targets(full=full)
+        if not sids:
             return
         if not self._is_switch_busy():
             self._info.setText("Fetching status…")
-        self._status_worker = StatusFetchWorker(all_sids, ctrl=self._ctrl)
+        self._status_worker = StatusFetchWorker(sids, ctrl=self._ctrl)
         self._status_worker.progress.connect(self._on_status_progress)
         self._status_worker.done.connect(self._on_status_done)
         self._status_worker.start()
@@ -255,22 +283,8 @@ class AccountCoordinator:
             if n:
                 self._info.setText(f"Loaded {n} account(s).")
 
-        for card in self._grid.cards():
-            sid = card.acc.get("steamid", "")
-            if sid not in statuses:
-                continue
-            status = statuses[sid]
-            card.set_status(
-                status.get("state", 0),
-                status.get("game", ""),
-                stale=status.get("stale", False),
-            )
-            card.set_ban_info(status.get("ban"))
-            card.set_level(status.get("level"))
-            if status.get("persona"):
-                card.set_persona(status["persona"])
-            if status.get("avatar_path"):
-                card.set_avatar_from_file(status["avatar_path"])
+        self._status_cache.update(statuses)
+        self._apply_statuses(statuses)
 
         # Cache the fresh persona names + avatar hashes so the next launch shows
         # them immediately (one batched write).
@@ -287,6 +301,24 @@ class AccountCoordinator:
         if self._grid.has_active_filters():
             self._grid.reapply_filters()
             self._sync_layout()
+
+    def _apply_statuses(self, statuses: dict) -> None:
+        for card in self._grid.cards():
+            sid = card.acc.get("steamid", "")
+            if sid not in statuses:
+                continue
+            status = statuses[sid]
+            card.set_status(
+                status.get("state", 0),
+                status.get("game", ""),
+                stale=status.get("stale", False),
+            )
+            card.set_ban_info(status.get("ban"))
+            card.set_level(status.get("level"))
+            if status.get("persona"):
+                card.set_persona(status["persona"])
+            if status.get("avatar_path"):
+                card.set_avatar_from_file(status["avatar_path"])
 
     def _prompt_dead_accounts(self, dead: list[dict]) -> None:
         """Offer to remove accounts flagged dead during a sweep (expired token
@@ -382,10 +414,13 @@ class AccountCoordinator:
         elif result.token_dead:
             self._check_stats["dead"] += 1
             self._check_dead.append({"steamid": steam_id, "name": name, "reason": "Logon rejected"})
-        elif result.in_use:
+        elif result.in_use and not result.web_only:
             self._check_stats["pending"] += 1
         else:
-            self._check_stats["done"] += 1
+            # A web-only fallback (account in use) still counts as pending —
+            # Prime and the loadout wait for a full check — but its stats are
+            # fresh, so the card is updated like any other check.
+            self._check_stats["pending" if result.in_use else "done"] += 1
             if card:
                 # A partial stats reply (e.g. the cooldown step timed out) must
                 # never overwrite another, still-good saved value — Premier,

@@ -162,7 +162,9 @@ class MainWindow(QMainWindow):
             set_status=self._ui.info_label.setText,
         )
 
-        self._filter_state: dict = {"colors": set(), "no_cooldown": False, "no_bans": False}
+        self._filter_state: dict = {
+            "colors": set(), "no_cooldown": False, "no_bans": False, "tiers": set(),
+        }
 
         self._wire_panels()
         self._sync_layout()
@@ -214,7 +216,7 @@ class MainWindow(QMainWindow):
         ui.account_grid.check_requested.connect(self._accounts.check_accounts)
         ui.account_grid.hwid_reset_requested.connect(self._accounts.reset_hwid)
         ui._btn_cs2_ranks.clicked.connect(self._accounts.refresh_all_stats)
-        ui._btn_refresh.clicked.connect(self._accounts.load_accounts)
+        ui._btn_refresh.clicked.connect(lambda: self._accounts.load_accounts(refresh_status=True))
         ui._btn_filter.clicked.connect(self._on_filter)
         ui._btn_settings.clicked.connect(self._settings_coord.toggle_panel)
         su.cb_cs2.toggled.connect(self._settings_coord.on_cs2_toggle)
@@ -283,8 +285,11 @@ class MainWindow(QMainWindow):
             colors=set(state["colors"]),
             no_cooldown=state["no_cooldown"],
             no_bans=state["no_bans"],
+            tiers=set(state["tiers"]),
         )
-        active = bool(state["colors"] or state["no_cooldown"] or state["no_bans"])
+        active = bool(
+            state["colors"] or state["no_cooldown"] or state["no_bans"] or state["tiers"]
+        )
         self._ui.set_filter_active(active)
         self._sync_layout()
 
@@ -355,7 +360,8 @@ class MainWindow(QMainWindow):
         return self._ui.entry
 
     def load_accounts(self) -> None:
-        self._accounts.load_accounts()
+        """The tray's Refresh: a full status refresh."""
+        self._accounts.load_accounts(refresh_status=True)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_Escape:
