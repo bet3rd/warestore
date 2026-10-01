@@ -43,19 +43,21 @@ Windows SmartScreen may warn on first run, as the installer isn't code-signed. C
 
 - **One-click switching** — sign in from a saved token by double-clicking a card or pressing `Alt`+`Enter`.
 - **Add accounts three ways** — paste a single token, bulk-import a list, or auto-extract the accounts already signed in.
-- **Organized roster** — color tags, instant search, and filters for cooldowns, bans and untagged accounts.
-- **Status on every card** — level, online state, VAC/game/trade bans, a live cooldown bar, and the account's CS2 friend code.
-- **CS2 config cloning** — copy binds, crosshair, sensitivity and video settings from one account to the rest, and they stay put.
-- **Matchmaking ranks (GCPD)** — pull Premier and Wingman rank, wins and cooldown status for one account or the whole roster.
+- **Account check** — a pasted token is checked with Steam before it's added (a rejected one asks before it's kept), and in the same invisible sign-in WareStore reads the account's CS2 stats, copies your weapon loadout, and clears its Workshop subscriptions. Each step can be turned off; right-click → **CS2 → Check account** refreshes stats any time.
+- **CS2 at a glance** — Prime, CS2 level, Premier and Wingman rank, competitive cooldown (permanent bans show as bans), and profile medals in the card tooltip.
+- **Organized roster** — color tags, instant search, and filters for Prime/Premier, cooldowns, bans and untagged accounts.
+- **Status on every card** — Steam level, online state, VAC/game/trade bans, a live cooldown bar, and the account's CS2 friend code.
+- **CS2 config cloning** — copy binds, crosshair, sensitivity, video settings and the weapon loadout from a source account (marked with a ★) to the rest, and they stay put.
 - **Cooldown tracking** — countdowns on the card, plus a tray notification the moment one clears.
-- **Invisible sign-in** — every switch logs in as Invisible, and the window can be hidden from screen capture (Discord, OBS).
+- **Make it yours** — pick an accent color (presets or any custom color); the interface follows Windows' display scale on every monitor.
+- **Invisible sign-in** — every switch and check logs in as Invisible, and the window can be hidden from screen capture (Discord, OBS).
 - **Optional HWID spoofer** — installed on demand from Settings; it is **not** bundled with the app.
 
 ## Privacy & safety
 
-**WareStore stores no passwords and uploads nothing.** Your refresh tokens never leave your PC. They're encrypted at rest with Windows DPAPI by default, or AES-256-GCM behind an optional master password with a recovery code. Saves are crash-safe, so a crash or power loss mid-write can't leave you with a corrupted vault.
+**WareStore stores no passwords and has no server of its own.** Your refresh tokens are only ever sent to Steam itself. They're encrypted at rest with Windows DPAPI by default, or AES-256-GCM behind an optional master password with a recovery code. Saves are crash-safe, so a crash or power loss mid-write can't leave you with a corrupted vault.
 
-The only network calls are read-only: checking for updates, and fetching public profile data from Steam's own API if you add a free API key. To switch accounts it reads and writes Steam's own login files and restarts Steam — all of it local. Cleanups and deletions always show you exactly what they'll remove first.
+Network calls go to Steam and GitHub only: checking for updates, public profile data from Steam's API if you add a free API key, the account check (an invisible sign-in to Steam's servers with the account's own token), and medal names and images from a public dataset. The account check only changes an account when you leave those steps on: it sets the weapon loadout and unsubscribes Workshop items. To switch accounts WareStore reads and writes Steam's own login files and restarts Steam, all locally. Cleanups and deletions always show you exactly what they'll remove first.
 
 ## Getting started
 
