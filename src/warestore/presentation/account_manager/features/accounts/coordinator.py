@@ -76,6 +76,12 @@ class AccountCoordinator:
         self._check_names: dict[str, str] = {}
         self._check_stats = {"done": 0, "pending": 0, "dead": 0, "failed": 0}
         self._check_dead: list[dict] = []
+        # SteamIDs currently queued or being checked (not yet reported idle) —
+        # used both to know which cards are *newly* queued (enqueue only
+        # returns a count) and to drive the status bar's N/total progress.
+        self._check_pending_ids: set[str] = set()
+        self._check_batch_total = 0
+        self._check_batch_done = 0
 
     @property
     def selected_account(self) -> dict | None:
@@ -481,9 +487,17 @@ class AccountCoordinator:
             self._check_worker.drained.connect(self._on_checks_drained)
         for acc in targets:
             self._check_names[acc["steamid"]] = acc.get("account_name", "") or acc["steamid"]
+        new_ids = [acc["steamid"] for acc in targets if acc["steamid"] not in self._check_pending_ids]
         added = self._check_worker.enqueue([acc["steamid"] for acc in targets])
         if not added:
             self._info.setText("Already checking those account(s)…")
+            return
+        self._check_batch_total += len(new_ids)
+        for sid in new_ids:
+            self._check_pending_ids.add(sid)
+            card = self._card_for(sid)
+            if card:
+                card.set_check_state("queued")
 
     def _card_for(self, steam_id: str):
         return next((c for c in self._grid.cards() if c.acc.get("steamid", "") == steam_id), None)
@@ -491,13 +505,21 @@ class AccountCoordinator:
     def _on_check_started(self, steam_id: str) -> None:
         card = self._card_for(steam_id)
         if card:
-            card.set_checking(True)
-        self._info.setText(f"Checking {self._check_names.get(steam_id, steam_id)}…")
+            card.set_check_state("checking")
+        name = self._check_names.get(steam_id, steam_id)
+        if self._check_batch_total > 1:
+            self._info.setText(
+                f"Checking {self._check_batch_done + 1}/{self._check_batch_total} — {name}…"
+            )
+        else:
+            self._info.setText(f"Checking {name}…")
 
     def _on_check_finished(self, steam_id: str, result) -> None:
         card = self._card_for(steam_id)
         if card:
-            card.set_checking(False)
+            card.set_check_state("idle")
+        self._check_pending_ids.discard(steam_id)
+        self._check_batch_done += 1
         name = self._check_names.get(steam_id, steam_id)
         if result is None:
             self._check_stats["failed"] += 1
@@ -524,6 +546,17 @@ class AccountCoordinator:
         self.apply_card_metadata()
 
     def _on_checks_drained(self) -> None:
+        # Any card still "queued" shouldn't happen (every enqueued id is
+        # expected to reach _on_check_finished first) — but a check that
+        # raised before started_account fired would leave one behind, so
+        # make sure nothing is left spinning/dimmed once the queue is empty.
+        for sid in getattr(self, "_check_pending_ids", ()):
+            card = self._card_for(sid)
+            if card:
+                card.set_check_state("idle")
+        self._check_pending_ids = set()
+        self._check_batch_total = 0
+        self._check_batch_done = 0
         s = self._check_stats
         total = sum(s.values())
         if total > 1:

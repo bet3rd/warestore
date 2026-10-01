@@ -154,3 +154,140 @@ def test_check_and_rank_sweep_dead_lists_stay_separate():
     assert coord._cs2_dead == [{"steamid": "rank_dead", "name": "Rank Dead"}]
     # And check_dead was cleared
     assert coord._check_dead == []
+
+
+def test_check_accounts_queues_cards_and_tracks_batch_progress():
+    """check_accounts marks newly-enqueued cards "queued" and tracks batch
+    progress; _on_check_started/_on_check_finished/_on_checks_drained drive the
+    per-card state and the status-bar text."""
+    from warestore.presentation.account_manager.features.accounts.coordinator import (
+        AccountCoordinator,
+    )
+
+    class FakeCard:
+        def __init__(self, acc):
+            self.acc = acc
+            self.state = "idle"
+
+        def set_check_state(self, state):
+            self.state = state
+
+    accounts = [
+        {"steamid": "a", "account_name": "Alice"},
+        {"steamid": "b", "account_name": "Bob"},
+    ]
+    cards = {acc["steamid"]: FakeCard(acc) for acc in accounts}
+
+    class FakeGrid:
+        def cards(self):
+            return list(cards.values())
+
+    class FakeCtrl:
+        def saved_token_entry(self, sid):
+            return {"token": "tok"}
+
+    class FakeWorker:
+        def __init__(self):
+            self.enqueued = []
+
+        def enqueue(self, steam_ids):
+            self.enqueued.append(list(steam_ids))
+            return len(steam_ids)
+
+    class FakeInfo:
+        text = ""
+
+        def setText(self, text):
+            self.text = text
+
+    coord = AccountCoordinator.__new__(AccountCoordinator)
+    coord._grid = FakeGrid()
+    coord._ctrl = FakeCtrl()
+    coord._info = FakeInfo()
+    coord._check_worker = FakeWorker()
+    coord._check_names = {}
+    coord._check_stats = {"done": 0, "pending": 0, "dead": 0, "failed": 0}
+    coord._check_dead = []
+    coord._check_pending_ids = set()
+    coord._check_batch_total = 0
+    coord._check_batch_done = 0
+    coord.apply_card_metadata = lambda: None
+    coord._prompt_dead_accounts = lambda dead: None
+
+    coord.check_accounts(accounts)
+
+    assert cards["a"].state == "queued"
+    assert cards["b"].state == "queued"
+    assert coord._check_pending_ids == {"a", "b"}
+    assert coord._check_batch_total == 2
+
+    coord._on_check_started("a")
+    assert cards["a"].state == "checking"
+    assert coord._info.text == "Checking 1/2 — Alice…"
+
+    coord._on_check_finished("a", None)
+    assert cards["a"].state == "idle"
+    assert "a" not in coord._check_pending_ids
+
+    coord._on_check_started("b")
+    assert coord._info.text == "Checking 2/2 — Bob…"
+
+    coord._on_check_finished("b", None)
+    assert cards["b"].state == "idle"
+
+    coord._on_checks_drained()
+    assert coord._check_batch_total == 0
+    assert coord._check_batch_done == 0
+    assert coord._check_pending_ids == set()
+
+
+def test_check_accounts_single_account_status_has_no_counter():
+    from warestore.presentation.account_manager.features.accounts.coordinator import (
+        AccountCoordinator,
+    )
+
+    class FakeCard:
+        def __init__(self, acc):
+            self.acc = acc
+            self.state = "idle"
+
+        def set_check_state(self, state):
+            self.state = state
+
+    acc = {"steamid": "a", "account_name": "Alice"}
+    card = FakeCard(acc)
+
+    class FakeGrid:
+        def cards(self):
+            return [card]
+
+    class FakeCtrl:
+        def saved_token_entry(self, sid):
+            return {"token": "tok"}
+
+    class FakeWorker:
+        def enqueue(self, steam_ids):
+            return len(steam_ids)
+
+    class FakeInfo:
+        text = ""
+
+        def setText(self, text):
+            self.text = text
+
+    coord = AccountCoordinator.__new__(AccountCoordinator)
+    coord._grid = FakeGrid()
+    coord._ctrl = FakeCtrl()
+    coord._info = FakeInfo()
+    coord._check_worker = FakeWorker()
+    coord._check_names = {}
+    coord._check_stats = {"done": 0, "pending": 0, "dead": 0, "failed": 0}
+    coord._check_dead = []
+    coord._check_pending_ids = set()
+    coord._check_batch_total = 0
+    coord._check_batch_done = 0
+    coord.apply_card_metadata = lambda: None
+
+    coord.check_accounts([acc])
+    coord._on_check_started("a")
+    assert coord._info.text == "Checking Alice…"

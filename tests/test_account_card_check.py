@@ -3,8 +3,9 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from PyQt5.QtCore import QAbstractAnimation
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QGraphicsOpacityEffect
 
 from warestore.application.account_manager.view_models import (
     AccountCardMenuState,
@@ -69,3 +70,51 @@ def test_set_cs2_cooldown_leaves_premier_untouched(_app):
     assert card._cs2_cooldown_expires == 9_999
     assert card._premier_rating == 15_000 and card._premier_wins == 30
     assert card._wingman_rank == 5 and card._wingman_wins == 2
+
+
+def test_check_state_checking_starts_and_stops_the_spinner(_app):
+    card = _card()
+    card.set_check_state("checking")
+    assert card._spin_anim is not None
+    assert card._spin_anim.state() == QAbstractAnimation.Running
+    card.set_check_state("idle")
+    assert card._spin_anim.state() == QAbstractAnimation.Stopped
+
+
+def test_check_state_queued_dims_the_card_and_idle_undims(_app):
+    card = _card()
+    card.set_check_state("queued")
+    eff = card.graphicsEffect()
+    assert isinstance(eff, QGraphicsOpacityEffect)
+    assert abs(eff.opacity() - 0.6) < 1e-6
+    card.set_check_state("idle")
+    assert card.graphicsEffect() is None
+
+
+def test_check_state_tooltip_rows(_app):
+    card = _card()
+    card.set_check_state("queued")
+    assert "Queued…" in card.toolTip()
+    card.set_check_state("checking")
+    assert "Checking…" in card.toolTip()
+    assert "Queued…" not in card.toolTip()
+    card.set_check_state("idle")
+    assert "Checking…" not in card.toolTip()
+    assert "Queued…" not in card.toolTip()
+
+
+def test_set_checking_wrapper_still_works(_app):
+    card = _card()
+    card.set_checking(True)
+    assert card._check_state == "checking"
+    assert "Checking…" in card.toolTip()
+    card.set_checking(False)
+    assert card._check_state == "idle"
+    assert "Checking…" not in card.toolTip()
+
+
+def test_check_ring_renders_without_raising_in_every_state(_app):
+    card = _card()
+    for state in ("idle", "queued", "checking", "idle"):
+        card.set_check_state(state)
+        card.grab()

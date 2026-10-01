@@ -19,6 +19,7 @@ from PyQt5.QtCore import (
 from PyQt5.QtGui import (
     QBrush,
     QColor,
+    QConicalGradient,
     QFont,
     QFontMetrics,
     QImage,
@@ -222,7 +223,9 @@ class AccountCard(QWidget):
         self._last_check: int = 0
         self._last_check_summary: str = ""
         self._check_pending: bool = False
-        self._checking: bool = False
+        self._check_state: str = "idle"
+        self._spin_angle: float = 0.0
+        self._spin_anim: QVariantAnimation | None = None
         self._menu_state = AccountCardMenuState(
             username=acc.get("account_name", ""),
             steam_id=acc.get("steamid", ""),
@@ -389,8 +392,47 @@ class AccountCard(QWidget):
                           self._premier_wins, self._wingman_wins)
 
     def set_checking(self, checking: bool) -> None:
-        self._checking = checking
+        """Thin wrapper over set_check_state for existing callers/tests."""
+        self.set_check_state("checking" if checking else "idle")
+
+    def _ensure_spin_anim(self) -> QVariantAnimation:
+        if self._spin_anim is None:
+            anim = QVariantAnimation(self)
+            anim.setStartValue(0.0)
+            anim.setEndValue(360.0)
+            anim.setDuration(1100)
+            anim.setLoopCount(-1)
+            anim.valueChanged.connect(self._on_spin_anim)
+            self._spin_anim = anim
+        return self._spin_anim
+
+    def _on_spin_anim(self, value) -> None:
+        self._spin_angle = float(value)
+        self.update()
+
+    def set_check_state(self, state: str) -> None:
+        """state in {"idle", "queued", "checking"} — drives the avatar ring:
+        a spinning accent arc while checking, a static dashed ring + dimmed
+        card while queued, nothing while idle."""
+        if state not in ("idle", "queued", "checking"):
+            raise ValueError(f"invalid check state: {state!r}")
+        if state == self._check_state:
+            return
+        self._check_state = state
+        if state == "checking":
+            self._ensure_spin_anim().start()
+        elif self._spin_anim is not None:
+            self._spin_anim.stop()
+        if state == "queued":
+            eff = self.graphicsEffect()
+            if not isinstance(eff, QGraphicsOpacityEffect):
+                eff = QGraphicsOpacityEffect(self)
+                self.setGraphicsEffect(eff)
+            eff.setOpacity(0.6)
+        else:
+            self.setGraphicsEffect(None)
         self._refresh_tooltip()
+        self.update()
 
     # An expiry further out than any real timed cooldown (Steam uses a far-future
     # value for a "Never"/permanent cooldown) is a PERMANENT competitive ban — it
@@ -542,8 +584,10 @@ class AccountCard(QWidget):
         token = self._token_tip()
         if token:
             rows.append(("Token", f"<span style='color:{token[1]}'>{esc(token[0])}</span>"))
-        if self._checking:
+        if self._check_state == "checking":
             rows.append(("Check", "<span style='color:#d6d6d6'>Checking…</span>"))
+        elif self._check_state == "queued":
+            rows.append(("Check", "<span style='color:#8a7a5a'>Queued…</span>"))
         elif self._check_pending:
             rows.append(("Check", "<span style='color:#8a7a5a'>Check pending (account was in use)</span>"))
         elif self._last_check:
@@ -722,6 +766,8 @@ class AccountCard(QWidget):
             painter.setPen(QPen(QColor(accent.current().sel_border), 1.5))
             painter.drawPath(path)
 
+        self._paint_check_ring(painter)
+
         # status dot (top-right)
         if self._status_state >= 0:
             in_game = bool(self._status_game)
@@ -760,6 +806,41 @@ class AccountCard(QWidget):
 
         self._paint_footer(painter)
         painter.end()
+
+    def _paint_check_ring(self, painter: QPainter) -> None:
+        """Loading indicator around the avatar: a static dashed ring while
+        queued, a spinning accent arc while actively being checked."""
+        if self._check_state == "idle":
+            return
+        ax = (self.CARD_W - self.AVATAR_DISP) / 2
+        ring = QRectF(
+            ax - 4, self.AVATAR_Y - 4,
+            self.AVATAR_DISP + 8, self.AVATAR_DISP + 8,
+        )
+        if self._check_state == "queued":
+            pen = QPen(QColor(150, 150, 150, 140), 1.6, Qt.DashLine)
+            pen.setDashPattern([2, 3])
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(ring)
+            return
+
+        # checking: faint full track, then a spinning gradient arc on top.
+        painter.setPen(QPen(QColor(255, 255, 255, 25), 2.4))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(ring)
+
+        bright = QColor(accent.current().bright)
+        faded = QColor(bright)
+        faded.setAlpha(0)
+        gradient = QConicalGradient(ring.center(), self._spin_angle)
+        gradient.setColorAt(0.0, bright)
+        gradient.setColorAt(110 / 360, faded)
+        gradient.setColorAt(1.0, faded)
+        pen = QPen(QBrush(gradient), 2.4)
+        pen.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen)
+        painter.drawArc(ring, int(self._spin_angle * 16), 110 * 16)
 
     def _paint_footer(self, painter: QPainter) -> None:
         """One centred line of CS2 data below the divider.
