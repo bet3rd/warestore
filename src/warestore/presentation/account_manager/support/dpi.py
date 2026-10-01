@@ -23,6 +23,10 @@ def migrate_interface_scale(settings: dict) -> bool:
     if settings.get(MIGRATED_KEY):
         return False
     settings["dpi_scale"] = 100
+    # Saved positions were in physical pixels; Qt now reads them as scaled
+    # units, so on a 150% screen an old position can land off-screen.
+    settings["window_x"] = None
+    settings["window_y"] = None
     settings[MIGRATED_KEY] = True
     return True
 

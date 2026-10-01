@@ -20,6 +20,7 @@ from warestore.presentation.account_manager.features import (
     SettingsCoordinator,
 )
 from warestore.presentation.account_manager.support.single_instance import InstanceServer
+from warestore.presentation.account_manager.support.window_position import title_bar_visible
 from warestore.presentation.account_manager.ui.chrome import RoundedPanel as _RoundedPanel
 from warestore.presentation.account_manager.ui.panels import MainPanel, SettingsPanel
 from warestore.presentation.account_manager.ui.theme import (
@@ -329,7 +330,12 @@ class MainWindow(QMainWindow):
 
     def _restore_window_position(self) -> None:
         x, y = self._settings.get("window_x"), self._settings.get("window_y")
-        if isinstance(x, int) and isinstance(y, int):
+        if not (isinstance(x, int) and isinstance(y, int)):
+            return
+        screens = [s.availableGeometry() for s in QApplication.screens()]
+        # Off every screen (unplugged monitor, changed layout): keep the
+        # default placement rather than opening an invisible window.
+        if title_bar_visible(x, y, self.width(), screens):
             self.move(x, y)
 
     def _save_window_position(self) -> None:
