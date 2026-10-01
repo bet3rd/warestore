@@ -201,11 +201,14 @@ class AccountCheckService:
         source: SourceLoadout,
         *,
         deadline: float | None = None,
+        token: str | None = None,
     ) -> CheckResult:
+        """``token``: check this token instead of the saved one — a token add
+        checks the pasted token before anything is saved or written to Steam."""
         result = CheckResult(steam_id=steam_id)
         acct_name = self._name_for(steam_id)
         logger.debug("account-check: %s (…%s) — signing in (offline)…", acct_name, _short_id(steam_id))
-        token = self._token_for(steam_id)
+        token = token or self._token_for(steam_id)
         if not token:
             for name in STEP_NAMES:
                 result.outcomes[name] = StepOutcome("failed", "no saved token")

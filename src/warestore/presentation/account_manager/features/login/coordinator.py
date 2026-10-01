@@ -148,5 +148,6 @@ class LoginCoordinator:
                 self._entry.clear()
             self._set_login_enabled(False)
         else:
-            self._set_status("Switch/login failed — see log.")
+            reason = getattr(self._worker, "failure_message", "")
+            self._set_status(reason or "Switch/login failed — see log.")
         self._refresh_log()

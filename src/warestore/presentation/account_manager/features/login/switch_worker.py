@@ -48,9 +48,22 @@ class SwitchWorker(QThread):
         self.add_account_only = add_account_only
         self.spoof_on_login = spoof_on_login
         self.check_account = check_account
+        # Why the run failed, when it's something the user should read (shown
+        # instead of the generic "login failed").
+        self.failure_message = ""
 
     def run(self):
         try:
+            if self.check_account and self.mode == "token":
+                # Check the pasted token BEFORE anything is written to Steam or
+                # saved: a token Steam rejects must never be added.
+                result = self._run_account_check()
+                if result is not None and result.token_dead:
+                    self.failure_message = "Steam rejected this token — account not added."
+                    logger.warning("Token rejected by Steam — account not added.")
+                    self.status.emit(self.failure_message)
+                    self.finished.emit(False)
+                    return
             verb = "Adding" if self.add_account_only else "Switching"
             self.status.emit(f"{verb} — {self._label()}…")
             self._ctrl.kill_steam()
@@ -94,8 +107,6 @@ class SwitchWorker(QThread):
                     self.status.emit("Applied CS2 launch options from source.")
             except Exception as exc:
                 logger.warning(f"CS2 launch options copy skipped: {exc}")
-        if self.check_account and self.mode == "token":
-            self._run_account_check()
         if self.add_account_only:
             logger.info("Account added — leaving Steam closed (add-only mode).")
             return
@@ -131,24 +142,28 @@ class SwitchWorker(QThread):
             )
             self._ctrl.launch_steam(open_cs2=open_cs2)
 
-    def _run_account_check(self) -> None:
-        """One CS2 server session for the freshly added account, before Steam
-        starts (Steam is closed here, so the account isn't in use). Never blocks
-        the login: any failure is logged and Steam still launches."""
+    def _run_account_check(self):
+        """One CS2 server session with the pasted token, before it's added.
+        Returns the CheckResult, or None when the check couldn't run — then the
+        account is still added (only a token Steam rejects blocks the add)."""
         steam_id = self._ctrl.steam_id_for_entry(self.token)
         if not steam_id:
-            return
+            return None
         self.status.emit("Checking account…")
         deadline = time.monotonic() + ADD_CHECK_BUDGET
         try:
             source = self._source_for_check(steam_id, deadline)
-            result = self._ctrl.check_account(steam_id, source=source, deadline=deadline)
+            result = self._ctrl.check_account(
+                steam_id, source=source, deadline=deadline, token=self.token
+            )
             self.status.emit(f"Account check: {result.summary()}")
+            return result
         except Exception as exc:  # noqa: BLE001
             # Type-only logging is deliberate: the full exception text could
             # carry token material (e.g. embedded in a repr), so only the
             # exception's class name is ever logged here.
             logger.warning(f"Account check skipped: {type(exc).__name__}")
+            return None
 
     def _source_for_check(self, steam_id: str, deadline: float) -> SourceLoadout:
         """The source loadout to copy from, or a reason not to read one at all.

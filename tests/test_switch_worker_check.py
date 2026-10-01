@@ -13,6 +13,7 @@ from warestore.application.account_manager.account_check import (
 from warestore.presentation.account_manager.features.login.switch_worker import SwitchWorker
 
 TARGET_SID = "76561198000000002"
+RAW_TOKEN = "alice----eyJ"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -21,12 +22,14 @@ def _app():
 
 
 class FakeCtrl:
-    def __init__(self, fail=False, loadout_on=True, source_sid="76561198000000001"):
+    def __init__(self, fail=False, loadout_on=True, source_sid="76561198000000001", result=None):
         self.calls = []
         self.fail = fail
         self.loadout_on = loadout_on
         self.source_sid = source_sid
+        self.result = result
         self.deadlines: dict[str, float | None] = {}
+        self.checked_token = None
 
     def seed_cs2_config_if_new(self, sid):
         return False
@@ -49,66 +52,101 @@ class FakeCtrl:
         self.deadlines["read_source_loadout"] = deadline
         return SourceLoadout(steam_id=self.source_sid, name="src", loadout={})
 
-    def check_account(self, steam_id, *, source, steps=None, deadline=None):
+    def check_account(self, steam_id, *, source, steps=None, deadline=None, token=None):
         self.calls.append("check_account")
         self.deadlines["check_account"] = deadline
+        self.checked_token = token
         if self.fail:
             raise RuntimeError("boom")
-        return CheckResult(steam_id=steam_id)
+        return self.result or CheckResult(steam_id=steam_id)
+
+    def kill_steam(self):
+        self.calls.append("kill_steam")
+
+    def steam_install_path(self):
+        return r"C:\Steam"
+
+    def perform_token_login(self, token, disable_remote_play=False):
+        self.calls.append("perform_token_login")
+        return True
 
     def launch_steam(self, *, open_cs2=False):
         self.calls.append("launch_steam")
 
 
-def _worker(ctrl, check=True):
-    return SwitchWorker(mode="token", token="alice----eyJ", check_account=check, ctrl=ctrl)
+def _run(ctrl, check=True):
+    worker = SwitchWorker(mode="token", token=RAW_TOKEN, check_account=check, ctrl=ctrl)
+    out = {"finished": None, "status": []}
+    worker.finished.connect(lambda ok: out.__setitem__("finished", ok))
+    worker.status.connect(out["status"].append)
+    worker.run()  # synchronously; the logic doesn't need the thread
+    return out
 
 
-def test_check_runs_before_steam_launches():
+def test_the_token_is_checked_before_anything_is_written_to_steam():
     ctrl = FakeCtrl()
-    _worker(ctrl)._post_login(r"C:\Steam")
-    assert ctrl.calls == ["steam_id_for_entry", "read_source_loadout", "check_account", "launch_steam"]
+    out = _run(ctrl)
+    assert ctrl.calls == [
+        "steam_id_for_entry", "read_source_loadout", "check_account",
+        "kill_steam", "perform_token_login", "launch_steam",
+    ]
+    assert out["finished"] is True
 
 
-def test_a_failing_check_still_launches_steam():
+def test_the_check_uses_the_pasted_token_not_the_vault():
+    ctrl = FakeCtrl()
+    _run(ctrl)
+    assert ctrl.checked_token == RAW_TOKEN
+
+
+def test_a_rejected_token_is_never_added():
+    ctrl = FakeCtrl(result=CheckResult(steam_id=TARGET_SID, token_dead=True))
+    out = _run(ctrl)
+    assert "perform_token_login" not in ctrl.calls
+    assert "kill_steam" not in ctrl.calls and "launch_steam" not in ctrl.calls
+    assert out["finished"] is False
+    assert any("rejected" in s.lower() for s in out["status"])
+
+
+def test_a_check_that_cannot_reach_steam_still_adds_the_account():
     ctrl = FakeCtrl(fail=True)
-    _worker(ctrl)._post_login(r"C:\Steam")
-    assert ctrl.calls[-1] == "launch_steam"
+    out = _run(ctrl)
+    assert "perform_token_login" in ctrl.calls and out["finished"] is True
 
 
 def test_no_check_when_disabled():
     ctrl = FakeCtrl()
-    _worker(ctrl, check=False)._post_login(r"C:\Steam")
-    assert ctrl.calls == ["launch_steam"]
+    _run(ctrl, check=False)
+    assert ctrl.calls == ["kill_steam", "perform_token_login", "launch_steam"]
 
 
-# --- I1: the add-flow deadline is computed once, before the source read -----
+# --- the add-flow deadline is computed once, before the source read ---------
 
 
 def test_deadline_is_the_same_for_the_source_read_and_the_check():
     ctrl = FakeCtrl()
-    _worker(ctrl)._post_login(r"C:\Steam")
+    _run(ctrl)
     assert ctrl.deadlines["read_source_loadout"] is not None
     assert ctrl.deadlines["read_source_loadout"] == ctrl.deadlines["check_account"]
 
 
-# --- I2: never log into the source account when it can't matter ------------
+# --- never log into the source account when it can't matter -----------------
 
 
 def test_no_source_read_when_the_loadout_step_is_off():
     ctrl = FakeCtrl(loadout_on=False)
-    _worker(ctrl)._post_login(r"C:\Steam")
+    _run(ctrl)
     assert "read_source_loadout" not in ctrl.calls
-    assert ctrl.calls == ["steam_id_for_entry", "check_account", "launch_steam"]
+    assert ctrl.calls[:2] == ["steam_id_for_entry", "check_account"]
 
 
 def test_no_source_read_when_no_source_is_set():
     ctrl = FakeCtrl(source_sid="")
-    _worker(ctrl)._post_login(r"C:\Steam")
+    _run(ctrl)
     assert "read_source_loadout" not in ctrl.calls
 
 
 def test_no_source_read_when_the_target_is_the_source():
     ctrl = FakeCtrl(source_sid=TARGET_SID)
-    _worker(ctrl)._post_login(r"C:\Steam")
+    _run(ctrl)
     assert "read_source_loadout" not in ctrl.calls

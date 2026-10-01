@@ -558,3 +558,11 @@ def test_a_medal_icon_failure_never_fails_the_check(svc):
     FakeSession.script = {"profile": gp.GcProfile(level=12, premier_rating=-1, premier_wins=-1, medals=(874,))}
     result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
     assert result.outcomes["stats"].status == "ok" and meta.calls[-1][1]["medals"] == [874]
+
+
+def test_check_can_use_a_token_that_is_not_saved_yet(svc):
+    service, _ = svc
+    service._token_for = lambda sid: ""  # not in the vault yet (token add)
+    result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source(), token="pasted-token")
+    assert FakeSession.last.token == "pasted-token"
+    assert result.outcomes["stats"].status == "ok"

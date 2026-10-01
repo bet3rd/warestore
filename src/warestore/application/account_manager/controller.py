@@ -478,10 +478,12 @@ class AccountManagerController:
         source: SourceLoadout,
         steps: CheckSteps | None = None,
         deadline: float | None = None,
+        token: str | None = None,
     ) -> CheckResult:
-        """One CS2 server session for the account. Must run off the Qt thread."""
+        """One CS2 server session for the account. Must run off the Qt thread.
+        ``token`` checks a token that isn't saved yet (token add)."""
         return self._account_check_service().check(
-            steam_id, steps or self.account_check_steps(), source, deadline=deadline
+            steam_id, steps or self.account_check_steps(), source, deadline=deadline, token=token
         )
 
     def steam_id_for_entry(self, raw_entry: str) -> str:
