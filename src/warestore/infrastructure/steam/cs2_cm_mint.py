@@ -50,6 +50,11 @@ class TokenRejectedError(Exception):
         self.eresult = eresult
 
 
+class CmLogonError(Exception):
+    """Transient CM failure (no CM reachable / no logon response). Never means
+    the token is bad."""
+
+
 def _clean_token(raw: str) -> str:
     """Bare JWT from the app's ``username----<JWT>`` format (or a plain JWT).
     Without this the prefix rides along and the CM rejects it (InvalidPassword)."""
@@ -112,80 +117,89 @@ def _token_logon(client, refresh_token: str, steamid: int):
     return client.wait_msg(EMsg.ClientLogOnResponse, timeout=30)
 
 
+def open_cm_client(refresh_token: str):
+    """Connect and log on with the refresh token, appearing OFFLINE.
+
+    Returns ``(client, steamid64, clean_token)``; the caller must disconnect.
+    ValvePython's ``SteamClient`` defaults to ``persona_state = Online`` and
+    sends it automatically on logon (builtins/user.py), so it is set to Offline
+    first: no status is sent and friends never see the account come online.
+    Raises ``TokenRejectedError`` for a dead token, ``CmLogonError`` otherwise.
+    """
+    from steam.client import SteamClient
+    from steam.enums import EPersonaState, EResult
+
+    token = _clean_token(refresh_token)
+    if not token:
+        raise CmLogonError("empty token")
+    try:
+        steamid = _jwt_sub(token)
+    except Exception as exc:  # noqa: BLE001
+        raise CmLogonError("could not decode steamid from token") from exc
+
+    client = SteamClient()
+    client.persona_state = EPersonaState.Offline
+    for attempt in range(1, _CM_ATTEMPTS + 1):
+        if not client.connected and client.connect() is None:
+            logger.info("cm-logon: attempt %d could not connect to a CM", attempt)
+            continue
+        resp = _token_logon(client, token, steamid)
+        if resp is not None and resp.body.eresult == EResult.OK:
+            return client, steamid, token
+        reason = (EResult(resp.body.eresult).name if resp is not None
+                  and resp.body.eresult in EResult._value2member_map_ else "no response")
+        logger.info("cm-logon: attempt %d failed (%s)", attempt, reason)
+        try:
+            client.disconnect()
+        except Exception:  # noqa: BLE001
+            pass
+        if reason in _REJECTED_ERESULTS:
+            raise TokenRejectedError(reason)
+    raise CmLogonError(f"CM logon failed after {_CM_ATTEMPTS} attempts")
+
+
+def mint_access_token(client, token: str, steamid: int) -> str | None:
+    """Web access token over an authenticated session. Renewal is never requested,
+    so the refresh token is never rotated."""
+    from steam.enums import EResult
+
+    um = client.send_um_and_wait(_UM_METHOD, {"refresh_token": token, "steamid": steamid}, timeout=15)
+    if um is None or um.header.eresult != EResult.OK:
+        reason = (EResult(um.header.eresult).name if um is not None
+                  and um.header.eresult in EResult._value2member_map_ else "no response")
+        logger.warning("cs2-mint: GenerateAccessTokenForApp failed (%s)", reason)
+        return None
+    if getattr(um.body, "refresh_token", ""):  # must never happen (renewal not requested)
+        logger.error("cs2-mint: CM returned a rotated refresh token — aborting to be safe")
+        return None
+    return getattr(um.body, "access_token", "") or None
+
+
 def mint_web_cookies(refresh_token: str) -> dict | None:
     """Return ``{"steamLoginSecure": ..., "sessionid": ...}`` or None on failure.
 
     Non-destructive: the refresh token is used only for a CM logon and to mint an
     access token with renewal disabled; it is never rotated.
     """
-    token = _clean_token(refresh_token)
-    if not token:
-        return None
     try:
-        steamid = _jwt_sub(token)
-    except Exception:  # noqa: BLE001
-        logger.warning("cs2-mint: could not decode steamid from refresh token")
+        client, steamid, token = open_cm_client(refresh_token)
+    except TokenRejectedError:
+        raise
+    except CmLogonError as exc:
+        logger.warning("cs2-mint: %s", exc)
         return None
-
-    try:
-        from steam.client import SteamClient
-        from steam.enums import EResult
     except Exception as e:  # noqa: BLE001 - dependency missing / import error
         logger.warning("cs2-mint: ValvePython 'steam' unavailable: %s", e)
         return None
-
-    client = SteamClient()
     try:
-        resp = None
-        rejected = None  # a definitive token-rejection EResult, if seen
-        for attempt in range(1, _CM_ATTEMPTS + 1):
-            if not client.connected and client.connect() is None:
-                logger.info("cs2-mint: attempt %d could not connect to a CM", attempt)
-                continue
-            r = _token_logon(client, token, steamid)
-            if r is not None and r.body.eresult == EResult.OK:
-                resp = r
-                break
-            reason = (EResult(r.body.eresult).name if r is not None
-                      and r.body.eresult in EResult._value2member_map_ else "no response")
-            logger.info("cs2-mint: attempt %d logon failed (%s)", attempt, reason)
-            try:
-                client.disconnect()
-            except Exception:  # noqa: BLE001
-                pass
-            if reason in _REJECTED_ERESULTS:
-                rejected = reason  # a bad token won't recover on retry — stop
-                break
-        if resp is None:
-            if rejected is not None:
-                logger.warning("cs2-mint: token rejected (%s) — account is dead", rejected)
-                raise TokenRejectedError(rejected)
-            logger.warning("cs2-mint: CM logon failed after %d attempts", _CM_ATTEMPTS)
-            return None
-
-        um = client.send_um_and_wait(
-            _UM_METHOD, {"refresh_token": token, "steamid": steamid}, timeout=15
-        )
-        if um is None or um.header.eresult != EResult.OK:
-            reason = (EResult(um.header.eresult).name if um is not None
-                      and um.header.eresult in EResult._value2member_map_ else "no response")
-            logger.warning("cs2-mint: GenerateAccessTokenForApp failed (%s)", reason)
-            return None
-        access_token = getattr(um.body, "access_token", "") or ""
-        if getattr(um.body, "refresh_token", ""):  # must never happen (renewal not requested)
-            logger.error("cs2-mint: CM returned a rotated refresh token — aborting to be safe")
-            return None
+        access_token = mint_access_token(client, token, steamid)
         if not access_token:
-            logger.warning("cs2-mint: mint returned no access token")
             return None
-
         logger.info("cs2-mint: web cookie minted for %s (non-destructive)", steamid)
         return {
             "steamLoginSecure": urllib.parse.quote(f"{steamid}||{access_token}", safe=""),
             "sessionid": secrets.token_hex(12),
         }
-    except TokenRejectedError:
-        raise  # a dead-token signal, not an unexpected error — let it propagate
     except Exception:  # noqa: BLE001 - never propagate into the worker
         logger.exception("cs2-mint: unexpected error during mint")
         return None
