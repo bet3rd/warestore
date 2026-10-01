@@ -28,17 +28,29 @@ class FakeMeta:
 class FakeSession:
     script = {}
 
-    def __init__(self, token, *, read_only=False, deadline=None):
+    def __init__(self, token, *, read_only=False, web_only=False, deadline=None):
         self.token = token
         self.read_only = read_only
+        self.web_only = web_only
         self.deadline = deadline
         self.calls = []
         FakeSession.last = self
+        if web_only:
+            FakeSession.web = self
+        else:
+            FakeSession.full = self
 
     def __enter__(self):
-        if "enter" in self.script:
-            raise self.script["enter"]
+        key = "web_enter" if self.web_only else "enter"
+        if key in self.script:
+            raise self.script[key]
         return self
+
+    def prime(self):
+        return self._step("prime", True)
+
+    def gcpd_level(self):
+        return self._step("gcpd_level", 14)
 
     def __exit__(self, *exc):
         return False
@@ -71,6 +83,7 @@ class FakeSession:
 @pytest.fixture
 def svc():
     FakeSession.script = {}
+    FakeSession.web = None
     meta = FakeMeta()
     service = AccountCheckService(
         token_for=lambda sid: "tok-" + sid,
@@ -92,7 +105,7 @@ def test_all_steps_run_in_order_and_are_saved(svc):
     service, meta = svc
     result = service.check(TARGET, CheckSteps(), _source())
     assert FakeSession.last.calls == [
-        "profile", "cooldown_seconds", "gcpd_rank", "clear_workshop", "write_loadout",
+        "prime", "profile", "cooldown_seconds", "gcpd_rank", "clear_workshop", "write_loadout",
     ]
     assert {k: o.status for k, o in result.outcomes.items()} == {"stats": "ok", "workshop": "ok", "loadout": "ok"}
     sid, kw = meta.calls[-1]
@@ -111,7 +124,7 @@ def test_a_failing_step_does_not_stop_the_rest(svc):
 def test_disabled_steps_are_not_run(svc):
     service, _ = svc
     service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
-    assert FakeSession.last.calls == ["profile", "cooldown_seconds", "gcpd_rank"]
+    assert FakeSession.last.calls == ["prime", "profile", "cooldown_seconds", "gcpd_rank"]
 
 
 def test_loadout_skipped_for_the_source_itself_and_without_source(svc):
@@ -131,7 +144,8 @@ def test_rejected_token_flags_dead_and_saves_nothing(svc):
 
 def test_in_use_marks_pending(svc):
     service, meta = svc
-    FakeSession.script = {"enter": AccountInUseError("playing a game on this PC")}
+    FakeSession.script = {"enter": AccountInUseError("playing a game on this PC"),
+                          "web_enter": ConnectionError("no network")}
     result = service.check(TARGET, CheckSteps(), _source())
     assert result.in_use and meta.calls[-1] == (TARGET, {"pending": True})
     assert result.in_use_reason == "playing a game on this PC"
@@ -140,7 +154,7 @@ def test_in_use_marks_pending(svc):
 
 def test_in_use_without_a_reason_falls_back_in_the_summary(svc):
     service, _ = svc
-    FakeSession.script = {"enter": AccountInUseError()}
+    FakeSession.script = {"enter": AccountInUseError(), "web_enter": ConnectionError("no network")}
     result = service.check(TARGET, CheckSteps(), _source())
     assert result.in_use_reason == ""
     assert result.summary() == "skipped — account in use"
@@ -161,12 +175,13 @@ def test_in_use_detected_mid_cooldown_cycle_stops_the_check(svc):
     as a plain failed "stats" step — Workshop/loadout must never run against
     an account that turned out to be playing elsewhere mid-check."""
     service, meta = svc
-    FakeSession.script = {"cooldown_seconds": AccountInUseError("playing on another device")}
+    FakeSession.script = {"cooldown_seconds": AccountInUseError("playing on another device"),
+                          "web_enter": ConnectionError("no network")}
     result = service.check(TARGET, CheckSteps(), _source())
     assert result.in_use and result.in_use_reason == "playing on another device"
     assert "workshop" not in result.outcomes and "loadout" not in result.outcomes
-    assert "clear_workshop" not in FakeSession.last.calls
-    assert "write_loadout" not in FakeSession.last.calls
+    assert "clear_workshop" not in FakeSession.full.calls
+    assert "write_loadout" not in FakeSession.full.calls
     assert meta.calls[-1] == (TARGET, {"pending": True})
 
 
@@ -178,7 +193,7 @@ def test_cooldown_time_limit_during_cycle_keeps_profile_data_and_tries_gcpd(svc)
     service, meta = svc
     FakeSession.script = {"cooldown_seconds": GcUnavailableError("time limit")}
     result = service.check(TARGET, CheckSteps(), _source())
-    assert FakeSession.last.calls[:3] == ["profile", "cooldown_seconds", "gcpd_rank"]
+    assert FakeSession.last.calls[:4] == ["prime", "profile", "cooldown_seconds", "gcpd_rank"]
     assert result.outcomes["stats"].status == "ok"
     assert result.profile_ok and result.cs2_level == 6 and result.premier_rating == 15_000
     assert not result.cooldown_ok
@@ -244,7 +259,7 @@ def test_cooldown_timeout_does_not_overwrite_saved_cooldown(svc):
 
 def test_profile_timeout_does_not_overwrite_saved_level_or_premier(svc):
     service, meta = svc
-    FakeSession.script = {"profile": None}
+    FakeSession.script = {"profile": None, "gcpd_level": -1}
     result = service.check(TARGET, CheckSteps(), _source())
     assert result.outcomes["stats"].status == "ok"  # cooldown still answered
     sid, kw = meta.calls[-1]
@@ -327,6 +342,7 @@ def test_gcpd_only_still_saves_premier_even_though_gc_profile_never_answered(svc
         "profile": None,
         "cooldown_seconds": None,
         "gcpd_rank": Cs2Rank(premier_rating=9_000, premier_wins=5, wingman_rank=4, wingman_wins=1),
+        "gcpd_level": -1,
     }
     result = service.check(TARGET, CheckSteps(), _source())
     assert result.outcomes["stats"].status == "ok"
@@ -369,3 +385,73 @@ def test_stats_log_line_includes_wingman(svc, caplog):
     service.check(TARGET, CheckSteps(), _source())
     text = "\n".join(r.getMessage() for r in caplog.records)
     assert "Wingman 5" in text
+
+
+def test_prime_is_read_from_the_gc_and_saved(svc):
+    service, meta = svc
+    FakeSession.script = {"prime": False}
+    result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert result.prime == 0
+    assert meta.calls[-1][1]["prime"] == 0
+
+
+def test_unknown_prime_is_not_saved(svc):
+    service, meta = svc
+    FakeSession.script = {"prime": None}
+    service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert "prime" not in meta.calls[-1][1]
+
+
+def test_in_use_account_falls_back_to_web_only(svc):
+    service, meta = svc
+    gcpd = Cs2Rank(premier_rating=-1, wingman_rank=7, wingman_wins=3, cooldown_expires_unix=0)
+    FakeSession.script = {"enter": AccountInUseError("playing on another device"), "gcpd_rank": gcpd}
+    result = service.check(TARGET, CheckSteps(), _source())
+    web = FakeSession.web
+    assert web is not None and web.calls == ["gcpd_rank", "gcpd_level", "clear_workshop"]
+    assert result.in_use and result.cs2_level == 14 and result.wingman_rank == 7
+    assert result.outcomes["loadout"].status == "skipped"
+    sid, kw = meta.calls[-1]
+    assert kw["pending"] is True and kw["partial"] is True
+    assert kw["cs2_level"] == 14 and kw["wingman_rank"] == 7 and kw["cooldown_expires"] == 0
+    assert "prime" not in kw  # Prime only ever comes from the GC
+    assert "web only" in kw["summary"]
+
+
+def test_web_fallback_failure_still_flags_pending(svc):
+    service, meta = svc
+    FakeSession.script = {"enter": AccountInUseError("playing on another device"),
+                          "web_enter": ConnectionError("no network")}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.in_use
+    assert meta.calls[-1][1] == {"pending": True}
+
+
+def test_web_fallback_not_tried_for_loadout_only_checks(svc):
+    service, meta = svc
+    FakeSession.script = {"enter": AccountInUseError("playing on another device")}
+    service.check(TARGET, CheckSteps(stats=False, workshop=False), _source())
+    assert FakeSession.web is None
+    assert meta.calls[-1][1] == {"pending": True}
+
+
+def test_missing_gc_level_falls_back_to_gcpd(svc):
+    service, meta = svc
+    FakeSession.script = {"profile": gp.GcProfile(level=-1, premier_rating=-1, premier_wins=-1)}
+    result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert "gcpd_level" in FakeSession.last.calls
+    assert result.cs2_level == 14 and meta.calls[-1][1]["cs2_level"] == 14
+
+
+def test_unknown_level_is_never_saved_over_a_good_one(svc):
+    service, meta = svc
+    FakeSession.script = {"profile": gp.GcProfile(level=-1, premier_rating=-1, premier_wins=-1),
+                          "gcpd_level": -1}
+    service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert "cs2_level" not in meta.calls[-1][1]
+
+
+def test_gc_level_skips_the_gcpd_level_fetch(svc):
+    service, _ = svc
+    service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert "gcpd_level" not in FakeSession.last.calls

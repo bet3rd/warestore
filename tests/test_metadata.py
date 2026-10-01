@@ -136,3 +136,20 @@ def test_old_records_default_new_fields():
 
     rec = AccountRecord.from_raw({"color": "#fff"})
     assert (rec.cs2_level, rec.last_check, rec.last_check_summary, rec.check_pending) == (-1, 0, "", False)
+
+
+def test_partial_check_saves_results_and_stays_pending(tmp_path):
+    from warestore.infrastructure.persistence.metadata_repository import AccountMetadataRepository
+
+    repo = AccountMetadataRepository(str(tmp_path / "meta.json"))
+    repo.set_account_check("1", summary="ok", cs2_level=6, prime=1, now=100)
+    repo.set_account_check("1", summary="web only", pending=True, partial=True, cs2_level=9, now=200)
+    rec = repo.get("1")
+    assert rec.check_pending and rec.cs2_level == 9 and rec.last_check == 200
+    assert rec.prime == 1  # untouched: web-only never knows Prime
+
+
+def test_prime_defaults_to_unknown():
+    from warestore.domain.accounts.models import AccountRecord
+
+    assert AccountRecord.from_raw({"color": "#fff"}).prime == -1

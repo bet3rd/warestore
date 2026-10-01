@@ -33,6 +33,8 @@ EQUIP_REPLY_MSGS = (MSG_ADJUST_EQUIP_SLOTS, 21, 22, 23, 24, 26)
 
 SO_TYPE_EQUIP_SLOT = 3
 SO_TYPE_DEFAULT_EQUIPPED = 43
+SO_TYPE_GAME_ACCOUNT = 7  # CSOEconGameAccountClient
+ELEVATED_STATE_PRIME = 5  # game-account field 14
 RANK_TYPE_PREMIER = 11
 DEFAULT_ITEM_MASK = 0xF000000000000000
 
@@ -189,6 +191,29 @@ def parse_loadout(welcome: bytes, account_id: int) -> Loadout:
 def resolve_loadout(explicit: Loadout) -> Loadout:
     """All 30 weapon slots: the explicit entry if any, else the built-in default."""
     return {key: explicit.get(key, default) for key, default in DEFAULT_LOADOUT.items()}
+
+
+def decode_prime(welcome: bytes) -> bool | None:
+    """Prime status from a ClientWelcome's game-account object: elevated_state
+    (field 14) == 5 is Prime, missing is non-Prime. None when the welcome
+    carries no game-account object at all (unknown)."""
+    try:
+        for num, wt, cache in iter_fields(welcome):
+            if num != 3 or wt != 2:
+                continue
+            for n2, wt2, typed in iter_fields(cache):
+                if n2 != 2 or wt2 != 2:
+                    continue
+                fields = list(iter_fields(typed))
+                if not any(n3 == 1 and v == SO_TYPE_GAME_ACCOUNT for n3, _w, v in fields):
+                    continue
+                for n3, wt3, obj in fields:
+                    if n3 == 2 and wt3 == 2:
+                        state = next((v for n4, _w4, v in iter_fields(obj) if n4 == 14), 0)
+                        return state == ELEVATED_STATE_PRIME
+    except ValueError:
+        return None
+    return None
 
 
 def so_cache_version(welcome: bytes) -> int:

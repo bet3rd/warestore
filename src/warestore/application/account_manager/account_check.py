@@ -72,9 +72,12 @@ class CheckResult:
     in_use: bool = False
     in_use_reason: str = ""
     outcomes: dict[str, StepOutcome] = field(default_factory=dict)
+    web_only: bool = False  # in use: fell back to the web-only steps
     profile_ok: bool = False
+    level_ok: bool = False
     cooldown_ok: bool = False
     gcpd_ok: bool = False
+    prime: int = -1  # 1 Prime, 0 non-Prime, -1 unknown (GC only)
     cs2_level: int = -1
     premier_rating: int = -1
     premier_wins: int = -1
@@ -94,11 +97,12 @@ class CheckResult:
     def summary(self) -> str:
         if self.token_dead:
             return "token rejected by Steam"
-        if self.in_use:
-            return f"skipped — {self.in_use_reason or 'account in use'}"
-        parts: list[str] = []
+        reason = self.in_use_reason or "account in use"
+        if self.in_use and not self.web_only:
+            return f"skipped — {reason}"
+        parts: list[str] = [f"web only — {reason}"] if self.web_only else []
         stats = self.outcomes.get("stats")
-        if stats and stats.status == "ok" and self.cs2_level >= 0:
+        if stats and stats.status == "ok" and self.level_ok and self.cs2_level >= 0:
             parts.append(f"CS2 level {self.cs2_level}")
         work = self.outcomes.get("workshop")
         if work and work.status != "skipped":
@@ -192,8 +196,20 @@ class AccountCheckService:
         except AccountInUseError as exc:
             result.in_use = True
             result.in_use_reason = str(exc)
-            logger.info("account-check: %s — skipped: %s", acct_name, result.in_use_reason or "account in use")
-            self._metadata.set_account_check(steam_id, pending=True)
+            reason = result.in_use_reason or "account in use"
+            if not (steps.stats or steps.workshop):
+                logger.info("account-check: %s — skipped: %s", acct_name, reason)
+                self._metadata.set_account_check(steam_id, pending=True)
+                return result
+            logger.info("account-check: %s — %s; web-only check (no CS2, no loadout)", acct_name, reason)
+            self._web_only_check(token, steps, result, deadline, acct_name)
+            if result.token_dead:
+                return result
+            if result.web_only:
+                logger.info("account-check: %s — done: %s", acct_name, result.summary())
+                self._save(result, partial=True)
+            else:
+                self._metadata.set_account_check(steam_id, pending=True)
             return result
         except GcUnavailableError as exc:
             # str(exc) names GC_CLIENT_VERSION and never contains a token — the
@@ -253,6 +269,9 @@ class AccountCheckService:
         # discard a reply that already did arrive, nor skip GCPD.
         # AccountInUseError is NOT caught here: it must propagate (see
         # _run_steps) to check()'s own in-use handling.
+        prime = session.prime()
+        if prime is not None:
+            result.prime = 1 if prime else 0
         try:
             profile = session.profile()
         except GcUnavailableError:
@@ -273,12 +292,22 @@ class AccountCheckService:
         missing: list[str] = []
 
         if profile is not None:
-            result.cs2_level = profile.level
             result.profile_ok = True
-            level_txt = str(profile.level) if profile.level >= 0 else "unknown"
+            if profile.level >= 0:
+                result.cs2_level = profile.level
+                result.level_ok = True
         else:
-            level_txt = "unknown"
             missing.append("profile didn't answer")
+        if not result.level_ok:
+            # Some accounts' GC profile carries no level; GCPD's account tab has it.
+            try:
+                level = session.gcpd_level()
+            except Exception:  # noqa: BLE001 - best-effort, like the GCPD scrape
+                level = -1
+            if level >= 0:
+                result.cs2_level = level
+                result.level_ok = True
+        level_txt = str(result.cs2_level) if result.level_ok else "unknown"
 
         if gcpd is not None:
             result.wingman_rank = gcpd.wingman_rank
@@ -322,13 +351,74 @@ class AccountCheckService:
             cooldown_txt = "unknown"
             missing.append("cooldown didn't answer")
 
+        prime_txt = {1: "Prime", 0: "non-Prime"}.get(result.prime, "Prime unknown")
         line = (
-            f"account-check: {name} — stats: CS2 level {level_txt}, "
+            f"account-check: {name} — stats: {prime_txt}, CS2 level {level_txt}, "
             f"Premier {premier_txt}, Wingman {wingman_txt}, {cooldown_txt}"
         )
         if missing:
             line += " (" + ", ".join(missing) + ")"
         logger.info(line)
+        return StepOutcome("ok")
+
+    def _web_only_check(self, token: str, steps: CheckSteps, result: CheckResult,
+                        deadline: float | None, acct_name: str) -> None:
+        """For an account that's playing (here or elsewhere): a plain CM logon
+        that never starts CS2, so the other session keeps running. Gets what
+        the web can give — GCPD stats + Workshop. Prime and the loadout need
+        the CS2 servers, so they wait for a full check."""
+        try:
+            with self._session_factory(token, web_only=True, deadline=deadline) as session:
+                result.web_only = True
+                if steps.stats:
+                    result.outcomes["stats"] = self._guard(
+                        "stats", acct_name, lambda: self._web_stats(session, result, acct_name))
+                if steps.workshop:
+                    result.outcomes["workshop"] = self._guard(
+                        "workshop", acct_name, lambda: self._workshop(session, result, acct_name))
+                if steps.loadout:
+                    result.outcomes["loadout"] = StepOutcome("skipped", "account in use")
+        except TokenRejectedError:
+            result.token_dead = True
+            logger.warning("account-check: %s — token rejected by Steam", acct_name)
+        except Exception as exc:  # noqa: BLE001 - the fallback is best-effort
+            result.web_only = False
+            logger.info("account-check: %s — web-only check failed: %s", acct_name, type(exc).__name__)
+
+    @staticmethod
+    def _guard(name: str, acct_name: str, run) -> StepOutcome:
+        try:
+            outcome = run()
+        except Exception as exc:  # noqa: BLE001 - one step never stops the rest
+            outcome = StepOutcome("failed", type(exc).__name__)
+        if outcome.status == "failed":
+            logger.warning("account-check: %s — %s failed: %s", acct_name, name, outcome.detail or "failed")
+        return outcome
+
+    def _web_stats(self, session, result: CheckResult, name: str) -> StepOutcome:
+        gcpd = session.gcpd_rank()
+        level = session.gcpd_level()
+        if gcpd is None and level < 0:
+            return StepOutcome("failed", "GCPD didn't answer")
+        if level >= 0:
+            result.cs2_level = level
+            result.level_ok = True
+        if gcpd is not None:
+            result.gcpd_ok = True
+            result.premier_rating = gcpd.premier_rating if gcpd.premier_rating > 0 else -1
+            result.premier_wins = gcpd.premier_wins
+            result.wingman_rank = gcpd.wingman_rank
+            result.wingman_wins = gcpd.wingman_wins
+            result.cooldown_expires = gcpd.cooldown_expires_unix
+            result.cooldown_ok = True
+        logger.info(
+            "account-check: %s — web stats: CS2 level %s, Premier %s, Wingman %s, cooldown %s",
+            name,
+            level if level >= 0 else "unknown",
+            f"{result.premier_rating:,}" if result.premier_rating > 0 else "unranked",
+            result.wingman_rank if result.wingman_rank > 0 else "unranked",
+            "none" if result.cooldown_expires <= 0 else result.cooldown_expires,
+        )
         return StepOutcome("ok")
 
     def _workshop(self, session, result: CheckResult, name: str) -> StepOutcome:
@@ -356,9 +446,14 @@ class AccountCheckService:
         )
         return StepOutcome("ok" if matched == total else "failed", f"{matched}/{total} slots")
 
-    def _save(self, result: CheckResult) -> None:
+    def _save(self, result: CheckResult, *, partial: bool = False) -> None:
         kw: dict = {"summary": result.summary(), "now": int(self._wall_clock())}
-        if result.profile_ok:
+        if partial:
+            kw["pending"] = True
+            kw["partial"] = True
+        if result.prime >= 0:
+            kw["prime"] = result.prime
+        if result.level_ok:
             kw["cs2_level"] = result.cs2_level
         if result.profile_ok or result.gcpd_ok:
             kw["premier_rating"] = result.premier_rating

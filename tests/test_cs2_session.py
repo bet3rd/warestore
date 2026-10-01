@@ -340,3 +340,53 @@ def test_account_in_use_cs2_process_is_a_reason(monkeypatch):
 def test_account_in_use_different_active_user_is_none(monkeypatch):
     _patch_probe(monkeypatch, active=ACCT + 1, running_app=730, names={"steam.exe", "cs2.exe"})
     assert account_in_use(SID) is None
+
+
+# --- web-only mode (account playing elsewhere / boosting) ------------------
+
+
+def test_web_only_logs_on_without_starting_cs2_or_the_in_use_probe(monkeypatch):
+    monkeypatch.setattr(cs2_session, "mint_access_token", lambda client, token, steamid: "web-token")
+    client = FakeClient()
+    probed = []
+    s = Cs2Session(
+        _token(),
+        web_only=True,
+        logon=lambda tok, deadline=None: (client, SID, tok),
+        gc_factory=lambda c: pytest.fail("web-only must not talk to the GC"),
+        in_use_probe=lambda sid: probed.append(sid) or "playing a game on this PC",
+    )
+    s._gcpd_factory = FakeGcpdGateway
+    with s:
+        assert s.prime() is None
+        assert s.gcpd_rank() == "rank-sentinel"
+    assert client.games == []  # never "playing", never "stopped playing"
+    assert probed == []
+    assert client.disconnected
+
+
+def test_prime_read_from_the_welcome():
+    welcome = gp.encode_welcome([(gp.SO_TYPE_GAME_ACCOUNT, gp._vfield(1, 0) + gp._vfield(14, 5))])
+    s, _ = _session(FakeGC(welcome))
+    with s:
+        assert s.prime() is True
+
+
+class FakeLevelGateway:
+    def fetch_level_with_cookies(self, steam_id64, cookies):
+        return 33
+
+
+def test_gcpd_level_uses_the_shared_web_token(monkeypatch):
+    monkeypatch.setattr(cs2_session, "mint_access_token", lambda client, token, steamid: "web-token")
+    s, _ = _session(FakeGC(gp.encode_welcome([])))
+    s._gcpd_factory = FakeLevelGateway
+    with s:
+        assert s.gcpd_level() == 33
+
+
+def test_gcpd_level_is_unknown_without_a_web_token(monkeypatch):
+    monkeypatch.setattr(cs2_session, "mint_access_token", lambda client, token, steamid: None)
+    s, _ = _session(FakeGC(gp.encode_welcome([])))
+    with s:
+        assert s.gcpd_level() == -1

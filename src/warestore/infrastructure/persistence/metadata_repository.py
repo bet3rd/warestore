@@ -108,6 +108,8 @@ class AccountMetadataRepository:
         *,
         summary: str = "",
         pending: bool = False,
+        partial: bool = False,
+        prime: int | None = None,
         cs2_level: int | None = None,
         premier_rating: int | None = None,
         premier_wins: int | None = None,
@@ -117,14 +119,18 @@ class AccountMetadataRepository:
         now: int | None = None,
     ) -> None:
         """Store an account check. ``pending=True`` only flags a skipped attempt
-        and keeps the previous results. ``None`` stats are left untouched."""
+        and keeps the previous results — unless ``partial=True``: a web-only
+        fallback whose results are saved while the account stays pending a
+        full check. ``None`` stats are left untouched."""
         with _WRITE_LOCK:
             data = self._load()
             record = AccountRecord.from_raw(data.get(steam_id, {}))
             record.check_pending = pending
-            if not pending:
+            if not pending or partial:
                 record.last_check = int(now if now is not None else datetime.now().timestamp())
                 record.last_check_summary = summary
+                if prime is not None:
+                    record.prime = int(prime)
                 if cs2_level is not None:
                     record.cs2_level = int(cs2_level)
                 if premier_rating is not None:

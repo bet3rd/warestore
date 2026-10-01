@@ -29,6 +29,8 @@ class AccountRecord:
     last_check: int = 0
     last_check_summary: str = ""
     check_pending: bool = False
+    # From the CS2 Game Coordinator only: 1 Prime, 0 non-Prime, -1 never read.
+    prime: int = -1
 
     @classmethod
     def from_raw(cls, raw: object) -> "AccountRecord":
@@ -53,6 +55,7 @@ class AccountRecord:
                 last_check=int(raw.get("last_check", 0)),
                 last_check_summary=str(raw.get("last_check_summary", "")),
                 check_pending=bool(raw.get("check_pending", False)),
+                prime=int(raw.get("prime", -1)),
             )
         return cls()
 
@@ -75,4 +78,5 @@ class AccountRecord:
             "last_check": self.last_check,
             "last_check_summary": self.last_check_summary,
             "check_pending": self.check_pending,
+            "prime": self.prime,
         }

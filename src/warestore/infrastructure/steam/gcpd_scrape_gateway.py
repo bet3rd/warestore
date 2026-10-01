@@ -23,6 +23,7 @@ from warestore.infrastructure.steam.gcpd_parser import (
     looks_like_gcpd_page,
     looks_like_login_page,
     parse_matchmaking,
+    parse_profile_rank,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,10 +46,21 @@ class Cs2RankScrapeGateway:
         )
         return rank
 
-    def _scrape(self, steam_id64: int, cookies: dict) -> str | None:
+    def fetch_level_with_cookies(self, steam_id64: int, cookies: dict) -> int:
+        """CS2 level from the account tab ("CS:GO Profile Rank"), -1 if unknown."""
+        if not steam_id64 or not cookies.get("steamLoginSecure"):
+            return -1
+        html = self._scrape(steam_id64, cookies, tab="accountmain")
+        if html is None:
+            return -1
+        level = parse_profile_rank(html)
+        logger.info("cs2-rank: %s parsed -> level=%s", steam_id64, level)
+        return level
+
+    def _scrape(self, steam_id64: int, cookies: dict, tab: str = "matchmaking") -> str | None:
         url = (
             f"https://steamcommunity.com/profiles/{steam_id64}"
-            "/gcpd/730?tab=matchmaking&l=english"
+            f"/gcpd/730?tab={tab}&l=english"
         )
         header = "; ".join(f"{k}={v}" for k, v in cookies.items())
         req = urllib.request.Request(

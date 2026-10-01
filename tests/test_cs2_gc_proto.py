@@ -77,3 +77,23 @@ def test_negative_cooldown_seconds_mean_no_cooldown():
 
 def test_players_profile_without_entries_is_none():
     assert gp.decode_players_profile(b"", ACCT) is None
+
+
+def _game_account(**fields):
+    return b"".join(gp._vfield(num, value) for num, value in fields.items())
+
+
+def test_decode_prime_from_elevated_state():
+    prime = gp.encode_welcome([(gp.SO_TYPE_GAME_ACCOUNT, gp._vfield(1, 0) + gp._vfield(12, 1) + gp._vfield(14, 5))])
+    assert gp.decode_prime(prime) is True
+
+
+def test_decode_prime_missing_elevated_state_is_non_prime():
+    non_prime = gp.encode_welcome([(gp.SO_TYPE_GAME_ACCOUNT, gp._vfield(1, 0) + gp._vfield(12, 1))])
+    assert gp.decode_prime(non_prime) is False
+
+
+def test_decode_prime_unknown_without_game_account_object():
+    other = gp.encode_welcome([(gp.SO_TYPE_EQUIP_SLOT, gp.encode_equip_slot_object(ACCT, 2, 2, 61))])
+    assert gp.decode_prime(other) is None
+    assert gp.decode_prime(b"") is None

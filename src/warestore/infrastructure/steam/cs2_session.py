@@ -6,7 +6,9 @@
 
 Logs on with persona Offline, marks the account as playing CS2 only for the
 lifetime of the ``with`` block, and always stops "playing" and disconnects on
-exit. MUST run off the Qt thread (ValvePython/gevent).
+exit. ``web_only=True`` is a plain logon that never starts CS2 — for an account
+that is playing elsewhere — so only the web steps (GCPD, Workshop) work.
+MUST run off the Qt thread (ValvePython/gevent).
 """
 
 from __future__ import annotations
@@ -99,6 +101,7 @@ class Cs2Session:
         refresh_token: str,
         *,
         read_only: bool = False,  # kept for compatibility; no longer affects the in-use rule
+        web_only: bool = False,
         logon=open_cm_client,
         gc_factory=None,
         in_use_probe=account_in_use,
@@ -108,6 +111,7 @@ class Cs2Session:
     ) -> None:
         self._token = _clean_token(refresh_token)
         self._read_only = read_only
+        self._web_only = web_only
         self._logon = logon
         self._gc_factory = gc_factory or _default_gc_factory
         self._in_use_probe = in_use_probe
@@ -139,6 +143,12 @@ class Cs2Session:
         return min(want, remaining)
 
     def __enter__(self) -> "Cs2Session":
+        if self._web_only:
+            # The caller already knows the account is in use; this logon never
+            # starts CS2, so it can't disturb the session that's playing.
+            self._client, self.steamid, self._token = self._logon(self._token, deadline=self._deadline)
+            self.account_id = self.steamid & 0xFFFFFFFF
+            return self
         steamid = _jwt_sub(self._token)
         reason = self._in_use_probe(steamid)
         if reason:
@@ -181,10 +191,11 @@ class Cs2Session:
     def _close(self) -> None:
         if self._client is None:
             return
-        try:
-            self._client.games_played([])
-        except Exception:  # noqa: BLE001
-            pass
+        if not self._web_only:
+            try:
+                self._client.games_played([])
+            except Exception:  # noqa: BLE001
+                pass
         try:
             self._client.disconnect()
         except Exception:  # noqa: BLE001
@@ -216,6 +227,10 @@ class Cs2Session:
                 )
 
     # --- steps -----------------------------------------------------------------
+
+    def prime(self) -> bool | None:
+        """Prime status from the GC's welcome; None when unknown (web-only)."""
+        return gp.decode_prime(self._welcome) if self._welcome else None
 
     def read_loadout(self) -> gp.Loadout:
         return gp.resolve_loadout(gp.parse_loadout(self._welcome, self.account_id))
@@ -306,11 +321,24 @@ class Cs2Session:
         the GC's own profile()/cooldown_seconds() data must still save even
         when GCPD can't be reached.
         """
+        cookies = self._web_cookies()
+        if cookies is None:
+            return None
+        return self._gcpd_factory().fetch_with_cookies(self.steamid, cookies)
+
+    def gcpd_level(self) -> int:
+        """CS2 level from GCPD's account page (-1 if unknown) — for web-only
+        checks, where the GC's own profile isn't reachable."""
+        cookies = self._web_cookies()
+        if cookies is None:
+            return -1
+        return self._gcpd_factory().fetch_level_with_cookies(self.steamid, cookies)
+
+    def _web_cookies(self) -> dict | None:
         access_token = self._access_token()
         if not access_token:
             return None
-        cookies = {
+        return {
             "steamLoginSecure": quote(f"{self.steamid}||{access_token}", safe=""),
             "sessionid": secrets.token_hex(12),
         }
-        return self._gcpd_factory().fetch_with_cookies(self.steamid, cookies)
