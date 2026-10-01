@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PyQt5.QtWidgets import QApplication, QFileDialog, QWidget
+from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
 
 from warestore.application.account_manager.account_check import CheckSteps
 from warestore.application.account_manager.controller import AccountManagerController
@@ -23,6 +23,11 @@ from warestore.presentation.account_manager.support.account_targets import (
     normalize_account_targets,
 )
 
+
+RATE_LIMIT_MESSAGE = (
+    "Steam is rate-limiting sign-ins from this IP. Wait 30-60 minutes, or"
+    " switch to a VPN/proxy, then check again."
+)
 
 # Override Config's follow-up: just the weapon picks from the source.
 LOADOUT_ONLY = CheckSteps(loadout=True, stats=False, workshop=False)
@@ -75,6 +80,7 @@ class AccountCoordinator:
         self._check_pending_ids: set[str] = set()
         self._check_batch_total = 0
         self._check_batch_done = 0
+        self._check_rate_limited = False
 
     @property
     def selected_account(self) -> dict | None:
@@ -435,6 +441,16 @@ class AccountCoordinator:
         name = self._check_names.get(steam_id, steam_id)
         if result is None:
             self._check_stats["failed"] += 1
+        elif result.rate_limited:
+            # Every remaining sign-in would be refused too (and extend the
+            # block), so drop the rest of the queue and tell the user once.
+            self._check_stats["failed"] += 1
+            self._check_rate_limited = True
+            for sid in self._check_worker.clear_pending():
+                self._check_pending_ids.discard(sid)
+                dropped = self._card_for(sid)
+                if dropped:
+                    dropped.set_check_state("idle")
         elif result.token_dead:
             self._check_stats["dead"] += 1
             self._check_dead.append({"steamid": steam_id, "name": name, "reason": "Logon rejected"})
@@ -495,6 +511,18 @@ class AccountCoordinator:
                 parts.append(f"{s['failed']} failed")
             self._info.setText("Account check: " + ", ".join(parts) + ".")
         self._check_stats = {"done": 0, "pending": 0, "dead": 0, "failed": 0}
+        if self._check_rate_limited:
+            self._check_rate_limited = False
+            self._info.setText(RATE_LIMIT_MESSAGE)
+            self._warn_rate_limited()
         if self._check_dead:
             dead, self._check_dead = self._check_dead, []
             self._prompt_dead_accounts(dead)
+
+    def _warn_rate_limited(self) -> None:
+        box = QMessageBox(self._parent)
+        box.setWindowTitle("Steam rate limit")
+        box.setIcon(QMessageBox.Warning)
+        box.setText(RATE_LIMIT_MESSAGE)
+        box.setStandardButtons(QMessageBox.Ok)
+        box.exec_()

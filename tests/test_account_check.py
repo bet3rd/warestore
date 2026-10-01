@@ -508,3 +508,24 @@ def test_service_medal_not_fetched_when_it_cannot_matter(svc):
     FakeSession.script = {"profile": gp.GcProfile(level=12, premier_rating=-1, premier_wins=-1)}
     service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())  # Prime, 10+
     assert "gcpd_service_medal" not in FakeSession.last.calls
+
+
+def test_rate_limited_sign_in_is_flagged_and_saves_nothing(svc):
+    from warestore.infrastructure.steam.cs2_cm_mint import RateLimitedError
+
+    service, meta = svc
+    FakeSession.script = {"enter": RateLimitedError("RateLimitExceeded")}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.rate_limited and not result.token_dead
+    assert meta.calls == []
+    assert "rate limit" in result.summary().lower()
+
+
+def test_rate_limited_web_fallback_is_flagged(svc):
+    from warestore.infrastructure.steam.cs2_cm_mint import RateLimitedError
+
+    service, meta = svc
+    FakeSession.script = {"enter": AccountInUseError("playing on another device"),
+                          "web_enter": RateLimitedError("RateLimitExceeded")}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.rate_limited and result.in_use

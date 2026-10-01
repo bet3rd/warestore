@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -43,6 +44,12 @@ class AccountCheckQueue:
             added += 1
         return added
 
+    def clear(self) -> list[str]:
+        """Drop every queued item; returns the ids that were dropped."""
+        dropped = list(self._items)
+        self._items.clear()
+        return dropped
+
     def pop(self) -> tuple[str, CheckSteps | None] | None:
         if not self._items:
             return None
@@ -67,6 +74,10 @@ def _merge(a: CheckSteps | None, b: CheckSteps | None) -> CheckSteps | None:
 
 
 class AccountCheckWorker(QThread):
+    # Pause between two checks: each is a Steam sign-in, and a burst of them
+    # from one IP is what trips Steam's rate limit.
+    CHECK_GAP_SECONDS = 3.0
+
     started_account = pyqtSignal(str)
     finished_account = pyqtSignal(str, object)  # (steam_id, CheckResult)
     drained = pyqtSignal()
@@ -77,6 +88,7 @@ class AccountCheckWorker(QThread):
         self._queue = AccountCheckQueue()
         self._lock = threading.Lock()
         self._source = None
+        self._sleep = time.sleep
         # A batch enqueued while run() is exiting would otherwise sit unprocessed.
         self.finished.connect(self._restart_if_pending)
 
@@ -86,6 +98,11 @@ class AccountCheckWorker(QThread):
         if added and not self.isRunning():
             self.start()
         return added
+
+    def clear_pending(self) -> list[str]:
+        """Drop everything still queued (the running check finishes)."""
+        with self._lock:
+            return self._queue.clear()
 
     def _restart_if_pending(self) -> None:
         with self._lock:
@@ -113,13 +130,19 @@ class AccountCheckWorker(QThread):
         return self._source
 
     def run(self) -> None:
+        checked_any = False
         while True:
+            with self._lock:
+                more = len(self._queue) > 0
+            if more and checked_any and self.CHECK_GAP_SECONDS > 0:
+                self._sleep(self.CHECK_GAP_SECONDS)
             with self._lock:
                 item = self._queue.pop()
                 sid, steps = item if item is not None else (None, None)
                 self._queue.set_current(sid)
             if sid is None:
                 break
+            checked_any = True
             self.started_account.emit(sid)
             try:
                 result = self._ctrl.check_account(

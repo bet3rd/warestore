@@ -88,3 +88,21 @@ def test_connect_failure_raises_without_hanging_and_uses_finite_retry():
     assert client.connect_calls, "connect() was never called"
     for call in client.connect_calls:
         assert call["retry"] not in (0, None), "connect() must use a finite retry"
+
+
+def test_rate_limit_stops_at_once_without_retrying(monkeypatch):
+    calls = []
+
+    def fake_logon(c, t, s, timeout=30):
+        calls.append(1)
+        return SimpleNamespace(body=SimpleNamespace(eresult=EResult.RateLimitExceeded))
+
+    monkeypatch.setattr(mint, "_token_logon", fake_logon)
+    with pytest.raises(mint.RateLimitedError):
+        mint.open_cm_client(_token())
+    assert len(calls) == 1  # retrying would only dig the hole deeper
+    assert FakeClient.instances[-1].disconnected
+
+
+def test_rate_limit_is_still_a_transient_cm_error():
+    assert issubclass(mint.RateLimitedError, mint.CmLogonError)

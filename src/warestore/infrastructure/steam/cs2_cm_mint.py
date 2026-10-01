@@ -56,6 +56,11 @@ class CmLogonError(Exception):
     the token is bad."""
 
 
+class RateLimitedError(CmLogonError):
+    """Steam refused the logon with RateLimitExceeded: too many sign-ins from
+    this IP. Retrying only extends the block, so callers stop and tell the user."""
+
+
 def _clean_token(raw: str) -> str:
     """Bare JWT from the app's ``username----<JWT>`` format (or a plain JWT).
     Without this the prefix rides along and the CM rejects it (InvalidPassword)."""
@@ -166,6 +171,8 @@ def open_cm_client(refresh_token: str, deadline: float | None = None):
             pass
         if reason in _REJECTED_ERESULTS:
             raise TokenRejectedError(reason)
+        if reason == "RateLimitExceeded":
+            raise RateLimitedError(reason)
     raise CmLogonError(f"CM logon failed after {_CM_ATTEMPTS} attempts")
 
 

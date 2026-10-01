@@ -216,6 +216,7 @@ def test_check_accounts_queues_cards_and_tracks_batch_progress():
     coord._check_pending_ids = set()
     coord._check_batch_total = 0
     coord._check_batch_done = 0
+    coord._check_rate_limited = False
     coord.apply_card_metadata = lambda: None
     coord._prompt_dead_accounts = lambda dead: None
 
@@ -291,6 +292,7 @@ def test_check_accounts_single_account_status_has_no_counter():
     coord._check_pending_ids = set()
     coord._check_batch_total = 0
     coord._check_batch_done = 0
+    coord._check_rate_limited = False
     coord.apply_card_metadata = lambda: None
 
     coord.check_accounts([acc])
@@ -354,3 +356,70 @@ def test_override_config_also_copies_the_loadout():
     coord = _menu_coord(CheckSteps())
     coord.apply_cs2_source([{"steamid": "a"}, {"steamid": "src"}, {"steamid": "notoken"}])
     assert coord.queued == [(["a"], LOADOUT_ONLY)]
+
+
+
+@pytest.fixture(autouse=True)
+def _no_gap(monkeypatch):
+    monkeypatch.setattr(AccountCheckWorker, "CHECK_GAP_SECONDS", 0.0)
+
+
+def test_queue_clear_drops_everything_and_reports_it():
+    q = AccountCheckQueue()
+    q.add(["a", "b"])
+    assert q.clear() == ["a", "b"] and q.pop() is None
+
+
+def test_checks_are_spaced_but_not_before_the_first():
+    ctrl = FakeCtrl()
+    ctrl.loadout_on = False
+    worker = AccountCheckWorker(ctrl)
+    slept = []
+    worker._sleep = slept.append
+    worker.CHECK_GAP_SECONDS = 3.0
+    worker._queue.add(["a", "b", "c"])
+    worker.run()
+    assert slept == [3.0, 3.0]
+
+
+def test_coordinator_stops_the_queue_and_warns_on_a_rate_limit():
+    from warestore.presentation.account_manager.features.accounts.coordinator import (
+        AccountCoordinator,
+    )
+
+    class Card:
+        def __init__(self):
+            self.acc = {}
+            self.state = "queued"
+
+        def set_check_state(self, s):
+            self.state = s
+
+    cards = {"a": Card(), "b": Card(), "c": Card()}
+
+    class Worker:
+        def clear_pending(self):
+            return ["b", "c"]
+
+    coord = AccountCoordinator.__new__(AccountCoordinator)
+    coord._card_for = cards.get
+    coord._check_worker = Worker()
+    coord._check_names = {}
+    coord._check_stats = {"done": 0, "pending": 0, "dead": 0, "failed": 0}
+    coord._check_dead = []
+    coord._check_pending_ids = {"a", "b", "c"}
+    coord._check_batch_total = 3
+    coord._check_batch_done = 0
+    coord._check_rate_limited = False
+    coord._info = type("Info", (), {"text": "", "setText": lambda self, t: setattr(self, "text", t)})()
+    coord.apply_card_metadata = lambda: None
+    warned = []
+    coord._warn_rate_limited = lambda: warned.append(1)
+    coord._prompt_dead_accounts = lambda dead: None
+
+    coord._on_check_finished("a", CheckResult(steam_id="a", rate_limited=True))
+    assert {s: c.state for s, c in cards.items()} == {"a": "idle", "b": "idle", "c": "idle"}
+    assert coord._check_pending_ids == set()
+    coord._on_checks_drained()
+    assert warned == [1]
+    assert "VPN" in coord._info.text

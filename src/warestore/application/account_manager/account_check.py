@@ -12,7 +12,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from warestore.domain.accounts.cs2_tier import PREMIER_MIN_LEVEL
-from warestore.infrastructure.steam.cs2_cm_mint import CmLogonError, TokenRejectedError
+from warestore.infrastructure.steam.cs2_cm_mint import (
+    CmLogonError,
+    RateLimitedError,
+    TokenRejectedError,
+)
 from warestore.infrastructure.steam.cs2_gc_proto import PERMANENT_PENALTY_REASONS, Loadout
 from warestore.infrastructure.steam.cs2_session import (
     AccountInUseError,
@@ -70,6 +74,7 @@ class StepOutcome:
 class CheckResult:
     steam_id: str
     token_dead: bool = False
+    rate_limited: bool = False  # Steam refused the sign-in: too many from this IP
     in_use: bool = False
     in_use_reason: str = ""
     outcomes: dict[str, StepOutcome] = field(default_factory=dict)
@@ -99,6 +104,8 @@ class CheckResult:
     def summary(self) -> str:
         if self.token_dead:
             return "token rejected by Steam"
+        if self.rate_limited:
+            return "Steam rate limit — try later or use a VPN/proxy"
         reason = self.in_use_reason or "account in use"
         if self.in_use and not self.web_only:
             return f"skipped — {reason}"
@@ -212,6 +219,12 @@ class AccountCheckService:
                 self._save(result, partial=True)
             else:
                 self._metadata.set_account_check(steam_id, pending=True)
+            return result
+        except RateLimitedError:
+            result.rate_limited = True
+            logger.warning("account-check: %s — Steam is rate-limiting sign-ins from this IP", acct_name)
+            for name in STEP_NAMES:
+                result.outcomes.setdefault(name, StepOutcome("failed", "Steam rate limit"))
             return result
         except GcUnavailableError as exc:
             # str(exc) names GC_CLIENT_VERSION and never contains a token — the
@@ -400,6 +413,10 @@ class AccountCheckService:
         except TokenRejectedError:
             result.token_dead = True
             logger.warning("account-check: %s — token rejected by Steam", acct_name)
+        except RateLimitedError:
+            result.web_only = False
+            result.rate_limited = True
+            logger.warning("account-check: %s — Steam is rate-limiting sign-ins from this IP", acct_name)
         except Exception as exc:  # noqa: BLE001 - the fallback is best-effort
             result.web_only = False
             logger.info("account-check: %s — web-only check failed: %s", acct_name, type(exc).__name__)
