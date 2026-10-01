@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import (
 
 from warestore.presentation.account_manager.ui.chrome import HeaderBar, RoundedPanel
 from warestore.presentation.account_manager.ui.color_picker import ColorSwatch
+from warestore.presentation.account_manager.ui.scroll_fade import attach_bottom_fade
 from warestore.presentation.account_manager.ui.section import SectionLabel
 from warestore.presentation.account_manager.ui.theme import accent
 from warestore.presentation.account_manager.ui.theme.accent import (
@@ -166,6 +167,7 @@ class SettingsPanel:
         layout.setSpacing(6)
         scroll.setWidget(inner)
         root.addWidget(scroll, 1)
+        attach_bottom_fade(scroll)
 
         layout.addWidget(SectionLabel("Startup"))
 

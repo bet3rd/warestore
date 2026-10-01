@@ -33,6 +33,7 @@ from PyQt5.QtWidgets import (
 from warestore import __version__
 from warestore.presentation.account_manager.ui.accounts import AccountGrid
 from warestore.presentation.account_manager.ui.chrome import HeaderBar
+from warestore.presentation.account_manager.ui.scroll_fade import attach_bottom_fade
 from warestore.presentation.account_manager.ui.section import SectionLabel
 from warestore.presentation.account_manager.ui.theme import accent
 
@@ -217,6 +218,7 @@ class MainPanel:
         self._grid_scroll.setFrameShape(QFrame.NoFrame)
         self._grid_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self._grid_scroll)
+        attach_bottom_fade(self._grid_scroll)
 
         layout.addWidget(self._section_sep())
 
