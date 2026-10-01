@@ -321,6 +321,10 @@ class AccountCard(QWidget):
     def is_banned(self) -> bool:
         return self._ban_color() is not None
 
+    @property
+    def is_cs2_source(self) -> bool:
+        return self._menu_state.is_cs2_source
+
     def set_selected(self, selected: bool):
         self._sel = selected
         if not selected:
@@ -612,6 +616,12 @@ class AccountCard(QWidget):
         elif self._last_check:
             ago = format_ago(self._last_check, int(time.time()))
             rows.append(("Checked", f"<span style='color:#d6d6d6'>{esc(ago)}</span>"))
+        if self.is_cs2_source:
+            rows.append((
+                "Source",
+                f"<span style='color:{accent.current().bright};font-weight:600'>"
+                "&#9670; Config &amp; loadout source</span>",
+            ))
         if self._color and QColor(self._color).isValid():
             rows.append((
                 "Tag",
@@ -802,6 +812,21 @@ class AccountCard(QWidget):
             painter.setPen(QPen(QColor(self._BASE_R, self._BASE_G, self._BASE_B), 2.0))
             painter.setBrush(QBrush(ban_color))
             painter.drawEllipse(8, self.height() - dot_r * 2 - 8, dot_r * 2, dot_r * 2)
+
+        # config/loadout source mark (bottom-right): a diamond, so it reads
+        # differently from the round status and ban dots.
+        if self.is_cs2_source:
+            r = 6
+            cx, cy = self.width() - r - 8, self.height() - r - 8
+            mark = QPainterPath()
+            mark.moveTo(cx, cy - r)
+            mark.lineTo(cx + r, cy)
+            mark.lineTo(cx, cy + r)
+            mark.lineTo(cx - r, cy)
+            mark.closeSubpath()
+            painter.setPen(QPen(QColor(self._BASE_R, self._BASE_G, self._BASE_B), 2.0))
+            painter.setBrush(QBrush(QColor(accent.current().bright)))
+            painter.drawPath(mark)
 
         # level (top-left)
         if self._level is not None:

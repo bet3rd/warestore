@@ -137,3 +137,20 @@ def test_check_ring_renders_without_raising_in_every_state(_app):
     for state in ("idle", "queued", "checking", "idle"):
         card.set_check_state(state)
         card.grab()
+
+
+def _source_state(is_source):
+    menu = AccountCardMenuState(username="alice", steam_id="76561198000000001", saved_token="",
+                                has_saved_token=False, has_cooldown=False,
+                                is_cs2_source=is_source, has_cs2_source=True)
+    return AccountCardViewState(jwt_expires_in=3600, cooldown_label="", menu=menu)
+
+
+def test_source_account_is_marked(_app):
+    card = _card()
+    card.set_view_state(_source_state(True))
+    assert card.is_cs2_source
+    assert "Config &amp; loadout source" in card.toolTip()
+    card.set_view_state(_source_state(False))
+    assert not card.is_cs2_source
+    assert "loadout source" not in card.toolTip()
