@@ -84,3 +84,36 @@ def test_redirect_means_the_session_was_not_accepted():
     client = WorkshopWebClient(SID, "tok", opener=FakeOpener(redirect=True), sleep=lambda s: None)
     with pytest.raises(WorkshopSessionError):
         client.list_subscriptions()
+
+
+class VanityOpener(FakeOpener):
+    """Profile with a custom URL: /profiles/<id>/ redirects to /id/<name>/."""
+
+    def __init__(self, pages, location="https://steamcommunity.com/id/someone/myworkshopfiles"):
+        super().__init__(pages=pages)
+        self.location = location
+
+    def open(self, req, timeout=None):
+        if req.get_method() == "GET" and "/profiles/" in req.full_url:
+            self.requests.append(req)
+            raise urllib.error.HTTPError(req.full_url, 302, "Found", {"Location": self.location}, None)
+        return super().open(req, timeout)
+
+
+def test_custom_profile_url_redirect_is_followed():
+    opener = VanityOpener(pages={1: _page([str(i) for i in range(30)], 31), 2: _page(["30"], 31)})
+    client = WorkshopWebClient(SID, "tok", opener=opener, sleep=lambda s: None)
+    assert client.list_subscriptions() == [str(i) for i in range(31)]
+    gets = [r.full_url for r in opener.requests if r.get_method() == "GET"]
+    assert gets[1].startswith("https://steamcommunity.com/id/someone/myworkshopfiles/?appid=730")
+    assert "&p=2&" in gets[-1] and "/id/someone/" in gets[-1]
+
+
+def test_redirect_elsewhere_is_still_a_session_error():
+    for loc in ("https://steamcommunity.com/login/home/?goto=x",
+                "https://evil.example.com/id/someone/myworkshopfiles",
+                "http://steamcommunity.com/id/someone/myworkshopfiles"):
+        opener = VanityOpener(pages={}, location=loc)
+        client = WorkshopWebClient(SID, "tok", opener=opener, sleep=lambda s: None)
+        with pytest.raises(WorkshopSessionError):
+            client.list_subscriptions()

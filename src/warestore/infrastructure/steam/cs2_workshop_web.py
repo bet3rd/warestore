@@ -22,10 +22,12 @@ import urllib.request
 logger = logging.getLogger(__name__)
 
 _APP_ID = 730
-_LIST_URL = (
-    "https://steamcommunity.com/profiles/{sid}/myworkshopfiles/"
-    "?appid=730&browsefilter=mysubscriptions&numperpage=30&p={page}&l=english"
-)
+_COMMUNITY = "https://steamcommunity.com"
+_LIST_PATH = "/profiles/{sid}/myworkshopfiles/"
+_LIST_QUERY = "?appid=730&browsefilter=mysubscriptions&numperpage=30&p={page}&l=english"
+# A profile with a custom URL redirects /profiles/<id>/... to /id/<name>/...;
+# that is the only redirect we follow.
+_VANITY_PATH_RE = re.compile(r"^/id/[^/]+/myworkshopfiles/?$")
 _UNSUB_URL = "https://steamcommunity.com/sharedfiles/unsubscribe"
 _ID_RE = re.compile(r'filedetails/\?id=(\d+)"[^>]*><div class="workshopItemPreviewHolder')
 _TOTAL_RE = re.compile(r"of ([\d,]+) entries")
@@ -63,17 +65,34 @@ class WorkshopWebClient:
         req.add_header("User-Agent", "Mozilla/5.0")
         return self._opener.open(req, timeout=20)
 
+    def _vanity_path(self, exc: urllib.error.HTTPError) -> str | None:
+        """The /id/<name>/myworkshopfiles/ path a custom-URL profile redirects to,
+        or None when the redirect goes anywhere else (e.g. a login page)."""
+        location = urllib.parse.urlsplit((exc.headers or {}).get("Location", "") or "")
+        if location.scheme == "https" and location.netloc == "steamcommunity.com" \
+                and _VANITY_PATH_RE.match(location.path):
+            return location.path.rstrip("/") + "/"
+        return None
+
+    def _fetch_page(self, path: str, page: int) -> tuple[str, str]:
+        """(html, path) — the path changes once if the profile has a custom URL."""
+        req = urllib.request.Request(_COMMUNITY + path + _LIST_QUERY.format(page=page))
+        try:
+            with self._open(req) as resp:
+                return resp.read().decode("utf-8", "replace"), path
+        except urllib.error.HTTPError as exc:
+            if not 300 <= exc.code < 400:
+                raise
+            vanity = self._vanity_path(exc)
+            if vanity is None or vanity == path:
+                raise WorkshopSessionError("subscriptions page redirected") from exc
+        return self._fetch_page(vanity, page)
+
     def list_subscriptions(self) -> list[str]:
         ids: list[str] = []
+        path = _LIST_PATH.format(sid=self._steamid)
         for page in range(1, _MAX_PAGES + 1):
-            req = urllib.request.Request(_LIST_URL.format(sid=self._steamid, page=page))
-            try:
-                with self._open(req) as resp:
-                    html = resp.read().decode("utf-8", "replace")
-            except urllib.error.HTTPError as exc:
-                if 300 <= exc.code < 400:
-                    raise WorkshopSessionError("subscriptions page redirected") from exc
-                raise
+            html, path = self._fetch_page(path, page)
             page_ids, total = parse_subscription_page(html)
             new = [i for i in page_ids if i not in ids]
             ids.extend(new)
