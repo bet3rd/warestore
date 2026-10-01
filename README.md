@@ -44,7 +44,7 @@ Windows SmartScreen may warn on first run, as the installer isn't code-signed. C
 - **One-click switching** — sign in from a saved token by double-clicking a card or pressing `Alt`+`Enter`.
 - **Add accounts three ways** — paste a single token, bulk-import a list, or auto-extract the accounts already signed in.
 - **Account check** — a pasted token is checked with Steam before it's added (a rejected one asks before it's kept), and in the same invisible sign-in WareStore reads the account's CS2 stats, copies your weapon loadout, and clears its Workshop subscriptions. Each step can be turned off; right-click → **CS2 → Check account** refreshes stats any time.
-- **CS2 at a glance** — Prime, CS2 level, Premier and Wingman rank, competitive cooldown (permanent bans show as bans), and profile medals in the card tooltip.
+- **CS2 at a glance** — Prime, CS2 level, Premier and Wingman rank, competitive cooldown (including permanent CS2 bans), and profile medals in the card tooltip.
 - **Organized roster** — color tags, instant search, and filters for Prime/Premier, cooldowns, bans and untagged accounts.
 - **Status on every card** — Steam level, online state, VAC/game/trade bans, a live cooldown bar, and the account's CS2 friend code.
 - **CS2 config cloning** — copy binds, crosshair, sensitivity, video settings and the weapon loadout from a source account (marked with a ★) to the rest, and they stay put.
