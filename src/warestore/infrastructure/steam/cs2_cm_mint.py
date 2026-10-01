@@ -24,6 +24,7 @@ import hashlib
 import json
 import logging
 import secrets
+import time
 import urllib.parse
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ def _machine_id(seed: str) -> bytes:
     )
 
 
-def _token_logon(client, refresh_token: str, steamid: int):
+def _token_logon(client, refresh_token: str, steamid: int, timeout: float = 30):
     """Secure the channel, send a ClientLogon carrying the refresh token in
     access_token (field 108). Returns the ClientLogOnResponse or None."""
     from steam.core.msg import MsgProto
@@ -114,17 +115,18 @@ def _token_logon(client, refresh_token: str, steamid: int):
     b.machine_id = _machine_id(str(steamid))
     b.access_token = refresh_token
     client.send(msg)
-    return client.wait_msg(EMsg.ClientLogOnResponse, timeout=30)
+    return client.wait_msg(EMsg.ClientLogOnResponse, timeout=timeout)
 
 
-def open_cm_client(refresh_token: str):
+def open_cm_client(refresh_token: str, deadline: float | None = None):
     """Connect and log on with the refresh token, appearing OFFLINE.
 
     Returns ``(client, steamid64, clean_token)``; the caller must disconnect.
     ValvePython's ``SteamClient`` defaults to ``persona_state = Online`` and
     sends it automatically on logon (builtins/user.py), so it is set to Offline
     first: no status is sent and friends never see the account come online.
-    Raises ``TokenRejectedError`` for a dead token, ``CmLogonError`` otherwise.
+    Raises ``TokenRejectedError`` for a dead token, ``CmLogonError`` otherwise
+    (including when ``deadline`` — a ``time.monotonic()`` value — has passed).
     """
     from steam.client import SteamClient
     from steam.enums import EPersonaState, EResult
@@ -140,10 +142,19 @@ def open_cm_client(refresh_token: str):
     client = SteamClient()
     client.persona_state = EPersonaState.Offline
     for attempt in range(1, _CM_ATTEMPTS + 1):
-        if not client.connected and client.connect() is None:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise CmLogonError("time limit")
+        # retry is finite: ValvePython's default (retry=0) means "retry forever"
+        # (steam/core/cm.py), which would hang this call when CM ports are
+        # blocked or there's no network. connect() returns False on failure —
+        # None only means "already connecting" — so that's what we check.
+        if not client.connected and not client.connect(retry=2):
             logger.info("cm-logon: attempt %d could not connect to a CM", attempt)
             continue
-        resp = _token_logon(client, token, steamid)
+        timeout = 30.0
+        if deadline is not None:
+            timeout = max(1.0, min(30.0, deadline - time.monotonic()))
+        resp = _token_logon(client, token, steamid, timeout=timeout)
         if resp is not None and resp.body.eresult == EResult.OK:
             return client, steamid, token
         reason = (EResult(resp.body.eresult).name if resp is not None

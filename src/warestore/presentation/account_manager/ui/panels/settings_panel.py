@@ -331,7 +331,7 @@ class SettingsPanel:
 
         self._add_separator(layout)
 
-        layout.addWidget(SectionLabel("Account Check"))
+        layout.addWidget(SectionLabel("CS2 Account Check"))
         check_hint = QLabel(
             "One sign-in to Steam's servers when an account is added (right-click "
             "→ Check account runs it later). Invisible to friends."

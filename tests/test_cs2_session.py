@@ -1,5 +1,6 @@
 import base64
 import json
+import time
 
 import pytest
 
@@ -77,14 +78,15 @@ class FakeGC:
         return None
 
 
-def _session(gc, *, in_use=(False, False), read_only=False, client=None):
+def _session(gc, *, in_use=(False, False), read_only=False, client=None, deadline=None):
     client = client or FakeClient()
     s = Cs2Session(
         _token(),
         read_only=read_only,
-        logon=lambda tok: (client, SID, tok),
+        logon=lambda tok, deadline=None: (client, SID, tok),
         gc_factory=lambda c: gc,
         in_use_probe=lambda sid: in_use,
+        deadline=deadline,
     )
     s.HELLO_TIMEOUT = 0.01  # tests never wait
     return s, client
@@ -147,8 +149,17 @@ def test_profile_and_cooldown():
         assert s.cooldown_seconds() == 600
 
 
+def test_past_deadline_raises_gc_unavailable_quickly():
+    """I1: a session whose deadline has already passed must fail fast instead
+    of running the (several seconds long) hello retry loop."""
+    s, client = _session(FakeGC(answers_hello=True), deadline=time.monotonic() - 1)
+    with pytest.raises(GcUnavailableError):
+        s.__enter__()
+    assert client.disconnected
+
+
 def test_rejected_token_propagates():
-    def logon(_tok):
+    def logon(_tok, deadline=None):
         raise TokenRejectedError("InvalidPassword")
     s = Cs2Session(_token(), logon=logon, gc_factory=lambda c: FakeGC(), in_use_probe=lambda sid: (False, False))
     with pytest.raises(TokenRejectedError):

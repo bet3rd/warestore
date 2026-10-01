@@ -6,13 +6,15 @@ import time
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+from warestore.application.account_manager.account_check import SourceLoadout
 from warestore.application.account_manager.controller import AccountManagerController
 
 logger = logging.getLogger(__name__)
 
-# Upper bound for the account check on add, so a slow/unreachable Steam never
-# holds up the first login for long. Checked between steps.
-ADD_CHECK_BUDGET = 40.0
+# Hard cap for the account check on add, so a slow/unreachable Steam never
+# holds up the first login for long. The deadline is computed once, before the
+# source read, and threaded through both the source read and the check itself.
+ADD_CHECK_BUDGET = 30.0
 
 
 class SwitchWorker(QThread):
@@ -137,11 +139,29 @@ class SwitchWorker(QThread):
         if not steam_id:
             return
         self.status.emit("Checking account…")
+        deadline = time.monotonic() + ADD_CHECK_BUDGET
         try:
-            source = self._ctrl.read_source_loadout()
-            result = self._ctrl.check_account(
-                steam_id, source=source, deadline=time.monotonic() + ADD_CHECK_BUDGET
-            )
+            source = self._source_for_check(steam_id, deadline)
+            result = self._ctrl.check_account(steam_id, source=source, deadline=deadline)
             self.status.emit(f"Account check: {result.summary()}")
         except Exception as exc:  # noqa: BLE001
+            # Type-only logging is deliberate: the full exception text could
+            # carry token material (e.g. embedded in a repr), so only the
+            # exception's class name is ever logged here.
             logger.warning(f"Account check skipped: {type(exc).__name__}")
+
+    def _source_for_check(self, steam_id: str, deadline: float) -> SourceLoadout:
+        """The source loadout to copy from, or a reason not to read one at all.
+
+        Reading the source means a second CM logon, so it's skipped whenever
+        it can't matter: the loadout step is off, no source is configured, or
+        this account *is* the source (the service already skips the loadout
+        step for that case)."""
+        if not self._ctrl.account_check_steps().loadout:
+            return SourceLoadout(reason="loadout step off")
+        source_sid = self._ctrl.cs2_config_source()
+        if not source_sid:
+            return SourceLoadout(reason="no CS2 config source set")
+        if steam_id == source_sid:
+            return SourceLoadout(steam_id=source_sid)
+        return self._ctrl.read_source_loadout(deadline=deadline)

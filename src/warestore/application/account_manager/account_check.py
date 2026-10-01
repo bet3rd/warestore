@@ -59,15 +59,21 @@ class CheckResult:
     token_dead: bool = False
     in_use: bool = False
     outcomes: dict[str, StepOutcome] = field(default_factory=dict)
-    stats_ok: bool = False
+    profile_ok: bool = False
+    cooldown_ok: bool = False
     cs2_level: int = -1
     premier_rating: int = -1
     premier_wins: int = -1
     cooldown_expires: int = 0
     workshop_removed: int = 0
+    workshop_failed: int = 0
     loadout_matched: int = 0
     loadout_total: int = 0
     loadout_source: str = ""
+
+    @property
+    def stats_ok(self) -> bool:
+        return self.profile_ok or self.cooldown_ok
 
     def summary(self) -> str:
         if self.token_dead:
@@ -79,10 +85,10 @@ class CheckResult:
         if stats and stats.status == "ok" and self.cs2_level >= 0:
             parts.append(f"CS2 level {self.cs2_level}")
         work = self.outcomes.get("workshop")
-        if work and work.status == "ok":
-            parts.append(f"Workshop −{self.workshop_removed}")
-        load = self.outcomes.get("loadout")
-        if load and load.status == "ok":
+        if work and work.status != "skipped":
+            fail_note = f" ({self.workshop_failed} failed)" if self.workshop_failed > 0 else ""
+            parts.append(f"Workshop −{self.workshop_removed}{fail_note}")
+        if self.loadout_total > 0:
             ratio = "" if self.loadout_matched == self.loadout_total else f" {self.loadout_matched}/{self.loadout_total}"
             parts.append(f"Loadout{ratio} from {self.loadout_source}")
         failed = [k for k, o in self.outcomes.items() if o.status == "failed"]
@@ -111,7 +117,7 @@ class AccountCheckService:
         self._clock = clock
         self._wall_clock = wall_clock
 
-    def read_source_loadout(self) -> SourceLoadout:
+    def read_source_loadout(self, deadline: float | None = None) -> SourceLoadout:
         sid = self._source_steam_id()
         if not sid:
             return SourceLoadout(reason="no CS2 config source set")
@@ -120,7 +126,7 @@ class AccountCheckService:
         if not token:
             return SourceLoadout(steam_id=sid, name=name, reason="source account has no saved token")
         try:
-            with self._session_factory(token, read_only=True) as session:
+            with self._session_factory(token, read_only=True, deadline=deadline) as session:
                 return SourceLoadout(steam_id=sid, name=name, loadout=session.read_loadout())
         except AccountInUseError:
             return SourceLoadout(steam_id=sid, name=name, reason="source account is in CS2 right now")
@@ -145,7 +151,7 @@ class AccountCheckService:
                 result.outcomes[name] = StepOutcome("failed", "no saved token")
             return result
         try:
-            with self._session_factory(token) as session:
+            with self._session_factory(token, deadline=deadline) as session:
                 self._run_steps(session, steps, source, result, deadline)
         except TokenRejectedError:
             result.token_dead = True
@@ -154,10 +160,22 @@ class AccountCheckService:
             result.in_use = True
             self._metadata.set_account_check(steam_id, pending=True)
             return result
-        except (GcUnavailableError, CmLogonError, OSError) as exc:
+        except GcUnavailableError as exc:
+            # str(exc) names GC_CLIENT_VERSION and never contains a token — the
+            # one clue worth logging in full for a stale-client diagnosis.
+            logger.warning("account-check: %s for %s: %s", type(exc).__name__, steam_id, exc)
+            for name in STEP_NAMES:
+                result.outcomes.setdefault(name, StepOutcome("failed", "CS2 servers didn't answer"))
+            return result
+        except (CmLogonError, OSError) as exc:
             logger.warning("account-check: %s for %s", type(exc).__name__, steam_id)
             for name in STEP_NAMES:
                 result.outcomes.setdefault(name, StepOutcome("failed", "CS2 servers didn't answer"))
+            return result
+        except Exception as exc:  # noqa: BLE001 - an unexpected error must never vanish
+            logger.warning("account-check: unexpected %s for %s", type(exc).__name__, steam_id)
+            for name in STEP_NAMES:
+                result.outcomes.setdefault(name, StepOutcome("failed", "unexpected error"))
             return result
         self._save(result)
         return result
@@ -193,14 +211,16 @@ class AccountCheckService:
             result.cs2_level = profile.level
             result.premier_rating = profile.premier_rating
             result.premier_wins = profile.premier_wins
+            result.profile_ok = True
         if cooldown is not None:
             result.cooldown_expires = int(self._wall_clock()) + cooldown if cooldown > 0 else 0
-        result.stats_ok = True
+            result.cooldown_ok = True
         return StepOutcome("ok")
 
     def _workshop(self, session, result: CheckResult) -> StepOutcome:
         removed, failed = session.clear_workshop()
         result.workshop_removed = removed
+        result.workshop_failed = failed
         return StepOutcome("ok" if not failed else "failed", f"{failed} not removed" if failed else "")
 
     def _loadout(self, session, source: SourceLoadout, result: CheckResult) -> StepOutcome:
@@ -215,11 +235,12 @@ class AccountCheckService:
 
     def _save(self, result: CheckResult) -> None:
         kw: dict = {"summary": result.summary(), "now": int(self._wall_clock())}
-        if result.stats_ok:
+        if result.profile_ok:
             kw.update(
                 cs2_level=result.cs2_level,
                 premier_rating=result.premier_rating,
                 premier_wins=result.premier_wins,
-                cooldown_expires=result.cooldown_expires,
             )
+        if result.cooldown_ok:
+            kw["cooldown_expires"] = result.cooldown_expires
         self._metadata.set_account_check(result.steam_id, **kw)

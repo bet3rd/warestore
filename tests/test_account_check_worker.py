@@ -5,7 +5,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PyQt5.QtWidgets import QApplication
 
-from warestore.application.account_manager.account_check import CheckResult, SourceLoadout
+from warestore.application.account_manager.account_check import (
+    CheckResult,
+    CheckSteps,
+    SourceLoadout,
+)
 from warestore.presentation.account_manager.features.accounts.account_check_worker import (
     AccountCheckQueue,
     AccountCheckWorker,
@@ -25,9 +29,13 @@ class FakeCtrl:
         self.source_reads = 0
         self.checked = []
         self.source_sid = "src"
+        self.loadout_on = True
 
     def cs2_config_source(self):
         return self.source_sid
+
+    def account_check_steps(self):
+        return CheckSteps(loadout=self.loadout_on)
 
     def read_source_loadout(self):
         self.source_reads += 1
@@ -61,6 +69,51 @@ def test_worker_rereads_when_the_source_setting_changes():
     worker._queue.add(["b"])
     worker.run()
     assert ctrl.source_reads == 2 and ctrl.checked[-1] == ("b", "src2")
+
+
+# --- I4: the cached source loadout lasts one drain only ---------------------
+
+
+def test_source_is_reread_on_a_later_drain_even_with_the_same_source():
+    ctrl = FakeCtrl()
+    worker = AccountCheckWorker(ctrl)
+    worker._queue.add(["a"])
+    worker.run()
+    worker._queue.add(["b"])
+    worker.run()
+    assert ctrl.source_reads == 2
+    assert ctrl.checked == [("a", "src"), ("b", "src")]
+
+
+# --- I2: never log into the source when it can't matter ---------------------
+
+
+def test_no_source_read_when_the_loadout_step_is_off():
+    ctrl = FakeCtrl()
+    ctrl.loadout_on = False
+    worker = AccountCheckWorker(ctrl)
+    worker._queue.add(["a"])
+    worker.run()
+    assert ctrl.source_reads == 0
+    assert ctrl.checked == [("a", "")]
+
+
+def test_no_source_read_when_no_source_is_set():
+    ctrl = FakeCtrl()
+    ctrl.source_sid = ""
+    worker = AccountCheckWorker(ctrl)
+    worker._queue.add(["a"])
+    worker.run()
+    assert ctrl.source_reads == 0
+
+
+def test_no_source_read_when_the_target_is_the_source():
+    ctrl = FakeCtrl()
+    worker = AccountCheckWorker(ctrl)
+    worker._queue.add(["src"])  # target steam_id == the configured source
+    worker.run()
+    assert ctrl.source_reads == 0
+    assert ctrl.checked == [("src", "src")]
 
 
 def test_check_and_rank_sweep_dead_lists_stay_separate():

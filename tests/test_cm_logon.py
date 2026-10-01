@@ -19,14 +19,19 @@ def _token(sid=SID):
 
 class FakeClient:
     instances: list["FakeClient"] = []
+    connect_result = True
 
     def __init__(self):
         self.persona_state = EPersonaState.Online  # ValvePython's default
         self.connected = False
         self.disconnected = False
+        self.connect_calls: list[dict] = []
         FakeClient.instances.append(self)
 
-    def connect(self):
+    def connect(self, retry=0, delay=0):
+        self.connect_calls.append({"retry": retry, "delay": delay})
+        if not FakeClient.connect_result:
+            return False
         self.connected = True
         return True
 
@@ -37,13 +42,14 @@ class FakeClient:
 @pytest.fixture(autouse=True)
 def _fake_steam(monkeypatch):
     FakeClient.instances = []
+    FakeClient.connect_result = True
     monkeypatch.setattr(steam.client, "SteamClient", FakeClient)
 
 
 def test_logon_is_offline_before_the_logon_message(monkeypatch):
     seen = {}
 
-    def fake_logon(client, token, steamid):
+    def fake_logon(client, token, steamid, timeout=30):
         seen["persona"] = client.persona_state
         return SimpleNamespace(body=SimpleNamespace(eresult=EResult.OK))
 
@@ -56,7 +62,7 @@ def test_logon_is_offline_before_the_logon_message(monkeypatch):
 def test_rejected_token_raises_and_disconnects(monkeypatch):
     monkeypatch.setattr(
         mint, "_token_logon",
-        lambda c, t, s: SimpleNamespace(body=SimpleNamespace(eresult=EResult.InvalidPassword)),
+        lambda c, t, s, timeout=30: SimpleNamespace(body=SimpleNamespace(eresult=EResult.InvalidPassword)),
     )
     with pytest.raises(mint.TokenRejectedError):
         mint.open_cm_client(_token())
@@ -64,6 +70,21 @@ def test_rejected_token_raises_and_disconnects(monkeypatch):
 
 
 def test_no_response_is_transient(monkeypatch):
-    monkeypatch.setattr(mint, "_token_logon", lambda c, t, s: None)
+    monkeypatch.setattr(mint, "_token_logon", lambda c, t, s, timeout=30: None)
     with pytest.raises(mint.CmLogonError):
         mint.open_cm_client(_token())
+
+
+def test_connect_failure_raises_without_hanging_and_uses_finite_retry():
+    """C1: client.connect() must never be called with ValvePython's default
+    retry=0 (unlimited retries — steam/core/cm.py loops forever when CM ports
+    are blocked or there's no network), and a connect() False must not be
+    confused with the None "already connecting" case."""
+    FakeClient.connect_result = False
+    with pytest.raises(mint.CmLogonError):
+        mint.open_cm_client(_token())
+    assert len(FakeClient.instances) == 1
+    client = FakeClient.instances[0]
+    assert client.connect_calls, "connect() was never called"
+    for call in client.connect_calls:
+        assert call["retry"] not in (0, None), "connect() must use a finite retry"

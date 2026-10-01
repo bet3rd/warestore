@@ -15,6 +15,8 @@ import threading
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+from warestore.application.account_manager.account_check import SourceLoadout
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,8 +70,19 @@ class AccountCheckWorker(QThread):
         if pending and not self.isRunning():
             self.start()
 
-    def _source_loadout(self):
+    def _source_loadout(self, steam_id: str) -> SourceLoadout:
+        """The source loadout for ``steam_id``, read at most once per drain and
+        only when it could matter: the loadout step is on, a source is set,
+        and this account isn't the source itself (reading it would be a
+        pointless extra CM logon — the service already skips the loadout step
+        when target == source)."""
+        if not self._ctrl.account_check_steps().loadout:
+            return SourceLoadout(reason="loadout step off")
         wanted = self._ctrl.cs2_config_source()
+        if not wanted:
+            return SourceLoadout(reason="no CS2 config source set")
+        if steam_id == wanted:
+            return SourceLoadout(steam_id=wanted)
         if self._source is None or self._source.steam_id != wanted:
             self._source = self._ctrl.read_source_loadout()
         return self._source
@@ -83,10 +96,14 @@ class AccountCheckWorker(QThread):
                 break
             self.started_account.emit(sid)
             try:
-                result = self._ctrl.check_account(sid, source=self._source_loadout())
+                result = self._ctrl.check_account(sid, source=self._source_loadout(sid))
             except Exception:  # noqa: BLE001 - never crash the worker thread
                 logger.exception("account-check: worker failed for %s", sid)
                 result = None
             self.finished_account.emit(sid, result)
-        self._source = None if self._source is None or self._source.loadout is None else self._source
+        # The cached source loadout is only valid for this drain — a later
+        # drain (even with the same source setting) re-reads it, so a stale
+        # loadout from before the source account's own last check is never
+        # copied onto a later batch.
+        self._source = None
         self.drained.emit()

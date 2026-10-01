@@ -508,13 +508,17 @@ class AccountCoordinator:
             self._check_stats["pending"] += 1
         else:
             self._check_stats["done"] += 1
-            if card and result.stats_ok:
-                card.set_premier_and_cooldown(
-                    result.premier_rating, result.premier_wins, result.cooldown_expires
-                )
-                card.acc["premier_rating"] = result.premier_rating
-                card.acc["premier_wins"] = result.premier_wins
-                card.acc["cs2_cooldown_expires"] = result.cooldown_expires
+            if card:
+                # A partial stats reply (e.g. the cooldown step timed out) must
+                # never overwrite the other, still-good saved value — update
+                # Premier and the cooldown independently of each other.
+                if result.profile_ok:
+                    card.set_premier(result.premier_rating, result.premier_wins)
+                    card.acc["premier_rating"] = result.premier_rating
+                    card.acc["premier_wins"] = result.premier_wins
+                if result.cooldown_ok:
+                    card.set_cs2_cooldown(result.cooldown_expires)
+                    card.acc["cs2_cooldown_expires"] = result.cooldown_expires
         if result is not None:
             self._info.setText(f"{name}: {result.summary()}")
         self.apply_card_metadata()

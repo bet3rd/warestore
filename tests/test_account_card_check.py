@@ -51,3 +51,21 @@ def test_tooltip_shows_pending_and_checking(_app):
     assert "Checking…" in card.toolTip()
     card.set_checking(False)
     assert "Checking…" not in card.toolTip()
+
+
+def test_set_premier_leaves_cooldown_untouched(_app):
+    card = _card()
+    card.set_cs2_rank(15_000, 5, 1_234, 30, 2)
+    card.set_premier(16_000, 31)
+    assert card._premier_rating == 16_000 and card._premier_wins == 31
+    assert card._cs2_cooldown_expires == 1_234
+    assert card._wingman_rank == 5 and card._wingman_wins == 2
+
+
+def test_set_cs2_cooldown_leaves_premier_untouched(_app):
+    card = _card()
+    card.set_cs2_rank(15_000, 5, 1_234, 30, 2)
+    card.set_cs2_cooldown(9_999)
+    assert card._cs2_cooldown_expires == 9_999
+    assert card._premier_rating == 15_000 and card._premier_wins == 30
+    assert card._wingman_rank == 5 and card._wingman_wins == 2

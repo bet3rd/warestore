@@ -25,9 +25,10 @@ class FakeMeta:
 class FakeSession:
     script = {}
 
-    def __init__(self, token, *, read_only=False):
+    def __init__(self, token, *, read_only=False, deadline=None):
         self.token = token
         self.read_only = read_only
+        self.deadline = deadline
         self.calls = []
         FakeSession.last = self
 
@@ -163,3 +164,53 @@ def test_read_source_without_token():
 
 def test_steps_from_settings():
     assert CheckSteps.from_settings({"account_check_workshop": False}) == CheckSteps(workshop=False)
+
+
+def test_deadline_is_passed_through_to_the_session_factory(svc):
+    service, _ = svc
+    service.check(TARGET, CheckSteps(), _source(), deadline=42.0)
+    assert FakeSession.last.deadline == 42.0
+
+
+def test_cooldown_timeout_does_not_overwrite_saved_cooldown(svc):
+    service, meta = svc
+    FakeSession.script = {"cooldown_seconds": None}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.outcomes["stats"].status == "ok"  # profile still answered
+    sid, kw = meta.calls[-1]
+    assert "cooldown_expires" not in kw
+    assert kw["cs2_level"] == 6 and kw["premier_rating"] == 15_000
+
+
+def test_profile_timeout_does_not_overwrite_saved_level_or_premier(svc):
+    service, meta = svc
+    FakeSession.script = {"profile": None}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.outcomes["stats"].status == "ok"  # cooldown still answered
+    sid, kw = meta.calls[-1]
+    assert "cs2_level" not in kw and "premier_rating" not in kw and "premier_wins" not in kw
+
+
+def test_loadout_partial_still_shows_in_the_summary(svc):
+    service, _ = svc
+    FakeSession.script = {"write_loadout": (27, 30)}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.outcomes["loadout"].status == "failed"
+    assert "Loadout 27/30 from src" in result.summary()
+
+
+def test_workshop_failed_count_shows_in_the_summary(svc):
+    service, _ = svc
+    FakeSession.script = {"clear_workshop": (5, 2)}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.outcomes["workshop"].status == "failed"
+    assert "Workshop −5 (2 failed)" in result.summary()
+
+
+def test_unexpected_error_marks_remaining_steps_failed_and_saves_nothing(svc):
+    service, meta = svc
+    FakeSession.script = {"enter": ValueError("weird")}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert {o.status for o in result.outcomes.values()} == {"failed"}
+    assert all(o.detail == "unexpected error" for o in result.outcomes.values())
+    assert meta.calls == []

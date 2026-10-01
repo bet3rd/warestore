@@ -376,6 +376,18 @@ class AccountCard(QWidget):
         self.set_cs2_rank(premier_rating, self._wingman_rank, cooldown_expires,
                           premier_wins, self._wingman_wins)
 
+    def set_premier(self, premier_rating: int, premier_wins: int) -> None:
+        """Account-check update when only the profile step answered: Premier
+        changes, Wingman and the cooldown are left exactly as they were."""
+        self.set_cs2_rank(premier_rating, self._wingman_rank, self._cs2_cooldown_expires,
+                          premier_wins, self._wingman_wins)
+
+    def set_cs2_cooldown(self, cooldown_expires: int) -> None:
+        """Account-check update when only the cooldown step answered: the
+        cooldown changes, Premier and Wingman are left exactly as they were."""
+        self.set_cs2_rank(self._premier_rating, self._wingman_rank, cooldown_expires,
+                          self._premier_wins, self._wingman_wins)
+
     def set_checking(self, checking: bool) -> None:
         self._checking = checking
         self._refresh_tooltip()

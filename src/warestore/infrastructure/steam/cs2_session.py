@@ -75,6 +75,7 @@ class Cs2Session:
         gc_factory=None,
         in_use_probe=account_in_use,
         workshop_factory=WorkshopWebClient,
+        deadline: float | None = None,
     ) -> None:
         self._token = _clean_token(refresh_token)
         self._read_only = read_only
@@ -82,6 +83,7 @@ class Cs2Session:
         self._gc_factory = gc_factory or _default_gc_factory
         self._in_use_probe = in_use_probe
         self._workshop_factory = workshop_factory
+        self._deadline = deadline
         self._client = None
         self._gc = None
         self._welcome = b""
@@ -91,19 +93,31 @@ class Cs2Session:
 
     # --- lifecycle -----------------------------------------------------------
 
+    def _budget(self, want: float) -> float:
+        """``want`` capped by the time left before ``self._deadline``.
+
+        Raises ``GcUnavailableError`` once there's no time left, rather than
+        letting a wait run with a non-positive/negative timeout."""
+        if self._deadline is None:
+            return want
+        remaining = self._deadline - time.monotonic()
+        if remaining <= 0:
+            raise GcUnavailableError("time limit")
+        return min(want, remaining)
+
     def __enter__(self) -> "Cs2Session":
         steamid = _jwt_sub(self._token)
         logged_in_here, cs2_running = self._in_use_probe(steamid)
         if logged_in_here and (cs2_running or not self._read_only):
             raise AccountInUseError("account is in use on this PC")
-        self._client, self.steamid, self._token = self._logon(self._token)
+        self._client, self.steamid, self._token = self._logon(self._token, deadline=self._deadline)
         self.account_id = self.steamid & 0xFFFFFFFF
         try:
             self._gc = self._gc_factory(self._client)
             for emsg in gp.EQUIP_REPLY_MSGS:
                 self._gc.on(emsg, lambda _hdr, _body, _e=emsg: self._equip_replies.append(_e))
             self._client.games_played([gp.CS2_APP_ID])
-            self._welcome = self._hello(self.HELLO_TIMEOUT)
+            self._welcome = self._hello(self._budget(self.HELLO_TIMEOUT))
         except BaseException:
             self._close()
             raise
@@ -160,11 +174,11 @@ class Cs2Session:
             self._equip_replies.clear()
             change_num = gp.so_cache_version(self._welcome) + 1
             self._send(gp.MSG_ADJUST_EQUIP_SLOTS, gp.encode_adjust_equip_slots(to_send, change_num))
-            deadline = time.monotonic() + self.EQUIP_REPLY_TIMEOUT
-            while not self._equip_replies and time.monotonic() < deadline:
+            wait_deadline = time.monotonic() + self._budget(self.EQUIP_REPLY_TIMEOUT)
+            while not self._equip_replies and time.monotonic() < wait_deadline:
                 self._client.sleep(0.2)
             self._client.sleep(1.2)  # trailing SO updates arrive in the same burst
-            self._welcome = self._hello(self.HELLO_TIMEOUT)  # authoritative re-read
+            self._welcome = self._hello(self._budget(self.HELLO_TIMEOUT))  # authoritative re-read
         after = self.read_loadout()
         matched = sum(1 for key, itemdef in want.items() if after.get(key) == itemdef)
         if matched < len(want):
@@ -173,12 +187,12 @@ class Cs2Session:
 
     def profile(self) -> gp.GcProfile | None:
         self._send(gp.MSG_PROFILE_REQUEST, gp.encode_profile_request(self.account_id))
-        body = self._wait(gp.MSG_PROFILE, self.REPLY_TIMEOUT)
+        body = self._wait(gp.MSG_PROFILE, self._budget(self.REPLY_TIMEOUT))
         return gp.decode_players_profile(body, self.account_id) if body is not None else None
 
     def cooldown_seconds(self) -> int | None:
         self._send(gp.MSG_MM_HELLO, b"")
-        body = self._wait(gp.MSG_MM_HELLO_REPLY, self.REPLY_TIMEOUT)
+        body = self._wait(gp.MSG_MM_HELLO_REPLY, self._budget(self.REPLY_TIMEOUT))
         return gp.decode_account_profile(body).cooldown_seconds if body is not None else None
 
     def clear_workshop(self) -> tuple[int, int]:

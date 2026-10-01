@@ -497,9 +497,9 @@ class AccountManagerController:
     def account_check_steps(self) -> CheckSteps:
         return CheckSteps.from_settings(self.load_settings())
 
-    def read_source_loadout(self) -> SourceLoadout:
+    def read_source_loadout(self, deadline: float | None = None) -> SourceLoadout:
         """Source loadout for the account check. Must run off the Qt thread."""
-        return self._account_check_service().read_source_loadout()
+        return self._account_check_service().read_source_loadout(deadline)
 
     def check_account(
         self,
