@@ -21,7 +21,7 @@
 <a href="https://warestore.cc">Website</a>
 </h3>
 
-<img src="assets/screenshot.png" width="900" alt="WareStore Account Manager, with the settings panel open">
+<img src="assets/screenshot.png" width="900" alt="WareStore Account Manager 3.5: an account tooltip with CS2 tier and medals, and the settings panel with the accent color picker">
 
 </div>
 
