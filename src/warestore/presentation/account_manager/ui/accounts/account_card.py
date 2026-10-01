@@ -223,6 +223,7 @@ class AccountCard(QWidget):
         self._cs2_cooldown_expires: int = 0
         self._cs2_level: int = -1
         self._prime: int = -1
+        self._service_medal: int = -1
         self._last_check: int = 0
         self._check_pending: bool = False
         self._check_state: str = "idle"
@@ -326,7 +327,10 @@ class AccountCard(QWidget):
 
     @property
     def cs2_tier(self) -> str:
-        return cs2_tier(prime=self._prime, level=self._cs2_level, premier_rating=self._premier_rating)
+        return cs2_tier(
+            prime=self._prime, level=self._cs2_level,
+            premier_rating=self._premier_rating, service_medal=self._service_medal,
+        )
 
     @property
     def is_cs2_source(self) -> bool:
@@ -685,6 +689,7 @@ class AccountCard(QWidget):
             self._set_cooldown(state.cooldown_expires)
         self._cs2_level = state.cs2_level
         self._prime = state.prime
+        self._service_medal = state.service_medal
         self._last_check = state.last_check
         self._check_pending = state.check_pending
         self._refresh_tooltip()

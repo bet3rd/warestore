@@ -52,6 +52,9 @@ class FakeSession:
     def gcpd_level(self):
         return self._step("gcpd_level", 14)
 
+    def gcpd_service_medal(self):
+        return self._step("gcpd_service_medal", 0)
+
     def __exit__(self, *exc):
         return False
 
@@ -108,7 +111,8 @@ def test_all_steps_run_in_order_and_are_saved(svc):
     service, meta = svc
     result = service.check(TARGET, CheckSteps(), _source())
     assert FakeSession.last.calls == [
-        "prime", "profile", "cooldown_seconds", "gcpd_rank", "clear_workshop", "write_loadout",
+        "prime", "profile", "cooldown_seconds", "gcpd_rank", "gcpd_service_medal",
+        "clear_workshop", "write_loadout",
     ]
     assert {k: o.status for k, o in result.outcomes.items()} == {"stats": "ok", "workshop": "ok", "loadout": "ok"}
     sid, kw = meta.calls[-1]
@@ -127,7 +131,7 @@ def test_a_failing_step_does_not_stop_the_rest(svc):
 def test_disabled_steps_are_not_run(svc):
     service, _ = svc
     service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
-    assert FakeSession.last.calls == ["prime", "profile", "cooldown_seconds", "gcpd_rank"]
+    assert FakeSession.last.calls == ["prime", "profile", "cooldown_seconds", "gcpd_rank", "gcpd_service_medal"]
 
 
 def test_loadout_skipped_for_the_source_itself_and_without_source(svc):
@@ -411,7 +415,7 @@ def test_in_use_account_falls_back_to_web_only(svc):
     FakeSession.script = {"enter": AccountInUseError("playing on another device"), "gcpd_rank": gcpd}
     result = service.check(TARGET, CheckSteps(), _source())
     web = FakeSession.web
-    assert web is not None and web.calls == ["gcpd_rank", "gcpd_level", "clear_workshop"]
+    assert web is not None and web.calls == ["gcpd_rank", "gcpd_level", "gcpd_service_medal", "clear_workshop"]
     assert result.in_use and result.cs2_level == 14 and result.wingman_rank == 7
     assert result.outcomes["loadout"].status == "skipped"
     sid, kw = meta.calls[-1]
@@ -485,3 +489,22 @@ def test_ordinary_penalty_stays_timed(svc):
     FakeSession.script = {"cooldown_seconds": 502_496, "cooldown_reason": 22}
     result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
     assert result.cooldown_expires == 1_700_000_000 + 502_496
+
+
+def test_service_medal_read_for_a_prime_account_below_ten(svc):
+    service, meta = svc
+    FakeSession.script = {"profile": gp.GcProfile(level=3, premier_rating=-1, premier_wins=-1),
+                          "gcpd_service_medal": 1}
+    result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert result.service_medal == 1 and meta.calls[-1][1]["service_medal"] == 1
+
+
+def test_service_medal_not_fetched_when_it_cannot_matter(svc):
+    service, meta = svc
+    service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())  # Prime, level 6
+    FakeSession.script = {"prime": False}
+    service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())  # non-Prime
+    assert "gcpd_service_medal" not in FakeSession.last.calls
+    FakeSession.script = {"profile": gp.GcProfile(level=12, premier_rating=-1, premier_wins=-1)}
+    service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())  # Prime, 10+
+    assert "gcpd_service_medal" not in FakeSession.last.calls

@@ -153,3 +153,12 @@ def test_prime_defaults_to_unknown():
     from warestore.domain.accounts.models import AccountRecord
 
     assert AccountRecord.from_raw({"color": "#fff"}).prime == -1
+
+
+def test_service_medal_roundtrip(tmp_path):
+    from warestore.infrastructure.persistence.metadata_repository import AccountMetadataRepository
+
+    repo = AccountMetadataRepository(str(tmp_path / "meta.json"))
+    assert repo.get("1").service_medal == -1
+    repo.set_account_check("1", summary="ok", service_medal=1, now=100)
+    assert repo.get("1").service_medal == 1

@@ -148,6 +148,7 @@ class AccountsPresenter:
             last_check_summary=record.last_check_summary if record else "",
             check_pending=record.check_pending if record else False,
             prime=record.prime if record else -1,
+            service_medal=record.service_medal if record else -1,
         )
 
     @staticmethod

@@ -125,6 +125,7 @@ class Cs2Session:
         self._equip_replies: list[int] = []
         self._playing_blocked = False
         self._access_token_cache = _UNSET
+        self._gcpd_account: tuple[int, int] | None = None
         self.steamid = 0
         self.account_id = 0
 
@@ -334,11 +335,22 @@ class Cs2Session:
 
     def gcpd_level(self) -> int:
         """CS2 level from GCPD's account page (-1 if unknown) — for web-only
-        checks, where the GC's own profile isn't reachable."""
-        cookies = self._web_cookies()
-        if cookies is None:
-            return -1
-        return self._gcpd_factory().fetch_level_with_cookies(self.steamid, cookies)
+        checks, or when the GC's profile carries no level."""
+        return self._gcpd_account_page()[0]
+
+    def gcpd_service_medal(self) -> int:
+        """1 if GCPD says the account earned a service medal, 0 if not, -1 unknown."""
+        return self._gcpd_account_page()[1]
+
+    def _gcpd_account_page(self) -> tuple[int, int]:
+        """(level, service medal) from GCPD's account page, fetched at most once."""
+        if self._gcpd_account is None:
+            cookies = self._web_cookies()
+            self._gcpd_account = (
+                (-1, -1) if cookies is None
+                else self._gcpd_factory().fetch_account_with_cookies(self.steamid, cookies)
+            )
+        return self._gcpd_account
 
     def _web_cookies(self) -> dict | None:
         access_token = self._access_token()

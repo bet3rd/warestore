@@ -102,6 +102,17 @@ def parse_profile_rank(html: str) -> int:
     return int(m.group(1)) if m else -1
 
 
+_SERVICE_MEDAL_RE = re.compile(r"Earned a Service Medal:\s*(Yes|No)", re.I)
+
+
+def parse_service_medal(html: str) -> int:
+    """From GCPD's ``tab=accountmain``: 1 earned a service medal, 0 not, -1 unknown."""
+    m = _SERVICE_MEDAL_RE.search(_strip_tags(html))
+    if not m:
+        return -1
+    return 1 if m.group(1).lower() == "yes" else 0
+
+
 def parse_matchmaking(html: str, now: int | None = None) -> Cs2Rank:
     """Scrape Premier/Wingman + cooldown from the matchmaking-tab HTML."""
     out = Cs2Rank()

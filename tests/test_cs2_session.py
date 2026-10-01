@@ -373,16 +373,22 @@ def test_prime_read_from_the_welcome():
 
 
 class FakeLevelGateway:
-    def fetch_level_with_cookies(self, steam_id64, cookies):
-        return 33
+    fetches = 0
+
+    def fetch_account_with_cookies(self, steam_id64, cookies):
+        FakeLevelGateway.fetches += 1
+        return 33, 1
 
 
 def test_gcpd_level_uses_the_shared_web_token(monkeypatch):
     monkeypatch.setattr(cs2_session, "mint_access_token", lambda client, token, steamid: "web-token")
     s, _ = _session(FakeGC(gp.encode_welcome([])))
     s._gcpd_factory = FakeLevelGateway
+    FakeLevelGateway.fetches = 0
     with s:
         assert s.gcpd_level() == 33
+        assert s.gcpd_service_medal() == 1
+    assert FakeLevelGateway.fetches == 1  # one page for both
 
 
 def test_gcpd_level_is_unknown_without_a_web_token(monkeypatch):
@@ -390,3 +396,4 @@ def test_gcpd_level_is_unknown_without_a_web_token(monkeypatch):
     s, _ = _session(FakeGC(gp.encode_welcome([])))
     with s:
         assert s.gcpd_level() == -1
+        assert s.gcpd_service_medal() == -1

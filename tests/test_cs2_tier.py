@@ -26,3 +26,12 @@ def test_non_prime():
 
 def test_unknown_when_prime_never_read():
     assert cs2_tier(prime=-1, level=25, premier_rating=-1) == UNKNOWN
+
+
+def test_prime_with_a_service_medal_is_premier_at_any_level():
+    # A service medal resets the level after 40, so level 3 can still be past 10.
+    assert cs2_tier(prime=1, level=3, premier_rating=-1, service_medal=1) == PREMIER
+
+
+def test_service_medal_never_makes_a_non_prime_account_premier():
+    assert cs2_tier(prime=0, level=3, premier_rating=-1, service_medal=1) == NON_PRIME

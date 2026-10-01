@@ -94,3 +94,11 @@ def test_last_match_only_table_is_not_read_as_wins():
     )
     rank = parse_matchmaking(html, now=NOW)
     assert (rank.wingman_rank, rank.wingman_wins, rank.premier_wins) == (-1, -1, -1)
+
+
+def test_parse_service_medal():
+    from warestore.infrastructure.steam.gcpd_parser import parse_service_medal
+
+    assert parse_service_medal('<div class="generic_kv_line">Earned a Service Medal: Yes</div>') == 1
+    assert parse_service_medal('<div class="generic_kv_line">Earned a Service Medal: No</div>') == 0
+    assert parse_service_medal("<html></html>") == -1

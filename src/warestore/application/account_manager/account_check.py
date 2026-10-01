@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from warestore.domain.accounts.cs2_tier import PREMIER_MIN_LEVEL
 from warestore.infrastructure.steam.cs2_cm_mint import CmLogonError, TokenRejectedError
 from warestore.infrastructure.steam.cs2_gc_proto import PERMANENT_PENALTY_REASONS, Loadout
 from warestore.infrastructure.steam.cs2_session import (
@@ -78,6 +79,7 @@ class CheckResult:
     cooldown_ok: bool = False
     gcpd_ok: bool = False
     prime: int = -1  # 1 Prime, 0 non-Prime, -1 unknown (GC only)
+    service_medal: int = -1  # 1 earned one, 0 not, -1 unknown (GCPD)
     cs2_level: int = -1
     premier_rating: int = -1
     premier_wins: int = -1
@@ -308,6 +310,13 @@ class AccountCheckService:
                 result.cs2_level = level
                 result.level_ok = True
         level_txt = str(result.cs2_level) if result.level_ok else "unknown"
+        if result.prime == 1 and not (result.level_ok and result.cs2_level >= PREMIER_MIN_LEVEL):
+            # Only matters for a Prime account under 10: a service medal means
+            # it already passed 10 (the medal resets the level).
+            try:
+                result.service_medal = session.gcpd_service_medal()
+            except Exception:  # noqa: BLE001 - best-effort, like the GCPD scrape
+                result.service_medal = -1
 
         if gcpd is not None:
             result.wingman_rank = gcpd.wingman_rank
@@ -410,6 +419,7 @@ class AccountCheckService:
         level = session.gcpd_level()
         if gcpd is None and level < 0:
             return StepOutcome("failed", "GCPD didn't answer")
+        result.service_medal = session.gcpd_service_medal()  # same page as the level
         if level >= 0:
             result.cs2_level = level
             result.level_ok = True
@@ -463,6 +473,8 @@ class AccountCheckService:
             kw["partial"] = True
         if result.prime >= 0:
             kw["prime"] = result.prime
+        if result.service_medal >= 0:
+            kw["service_medal"] = result.service_medal
         if result.level_ok:
             kw["cs2_level"] = result.cs2_level
         if result.profile_ok or result.gcpd_ok:

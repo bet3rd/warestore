@@ -36,3 +36,4 @@ class AccountCardViewState:
     last_check_summary: str = ""
     check_pending: bool = False
     prime: int = -1
+    service_medal: int = -1

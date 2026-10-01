@@ -4,8 +4,10 @@
 """Which CS2 matchmaking tier an account is in.
 
 Prime comes only from the CS2 Game Coordinator (never GCPD). Premier unlocks
-at CS2 level 10 for a Prime account (nfatool's MinimumPremierLevel); an
-account with a CS Rating is Premier whatever else is known.
+at CS2 level 10 for a Prime account (nfatool's MinimumPremierLevel). A service
+medal resets the level after 40, so a Prime account with one is past 10 even
+when its level reads lower. An account with a CS Rating is Premier whatever
+else is known.
 """
 
 from __future__ import annotations
@@ -24,12 +26,12 @@ TIER_LABELS = {
 }
 
 
-def cs2_tier(*, prime: int, level: int, premier_rating: int) -> str:
-    """``prime``: 1 Prime, 0 non-Prime, -1 never read."""
+def cs2_tier(*, prime: int, level: int, premier_rating: int, service_medal: int = -1) -> str:
+    """``prime``: 1 Prime, 0 non-Prime, -1 never read. ``service_medal``: 1/0/-1 likewise."""
     if premier_rating > 0:
         return PREMIER
     if prime == 1:
-        return PREMIER if level >= PREMIER_MIN_LEVEL else PRIME
+        return PREMIER if level >= PREMIER_MIN_LEVEL or service_medal == 1 else PRIME
     if prime == 0:
         return NON_PRIME
     return UNKNOWN

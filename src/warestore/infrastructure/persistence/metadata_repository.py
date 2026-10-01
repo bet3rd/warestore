@@ -110,6 +110,7 @@ class AccountMetadataRepository:
         pending: bool = False,
         partial: bool = False,
         prime: int | None = None,
+        service_medal: int | None = None,
         cs2_level: int | None = None,
         premier_rating: int | None = None,
         premier_wins: int | None = None,
@@ -131,6 +132,8 @@ class AccountMetadataRepository:
                 record.last_check_summary = summary
                 if prime is not None:
                     record.prime = int(prime)
+                if service_medal is not None:
+                    record.service_medal = int(service_medal)
                 if cs2_level is not None:
                     record.cs2_level = int(cs2_level)
                 if premier_rating is not None:
