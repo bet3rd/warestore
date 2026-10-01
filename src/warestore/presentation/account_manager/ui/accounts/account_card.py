@@ -566,10 +566,10 @@ class AccountCard(QWidget):
     def _esc(text: str) -> str:
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    _MEDALS_PER_LINE = 6
+    _MEDALS_PER_LINE = 4
 
     def _medals_tip(self) -> str:
-        """Medal icons (22px, from the 64px cache), six per line; a medal whose
+        """Medal icons (32px, from the 64px cache), four per line; a medal whose
         icon isn't cached yet shows its name instead."""
         parts: list[str] = []
         for i, (name, path) in enumerate(self._medals):
@@ -577,7 +577,7 @@ class AccountCard(QWidget):
                 parts.append("<br>")
             if path:
                 src = QUrl.fromLocalFile(path).toString()
-                parts.append(f"<img src='{src}' width='22' height='22'>&nbsp;")
+                parts.append(f"<img src='{src}' width='32' height='32'>&nbsp;")
             else:
                 parts.append(f"<span style='color:#d6d6d6'>{self._esc(name)}</span>&nbsp; ")
         return "".join(parts)
