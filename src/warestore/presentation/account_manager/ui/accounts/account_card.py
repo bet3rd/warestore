@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 
 from PyQt5.QtCore import (
@@ -620,7 +621,7 @@ class AccountCard(QWidget):
             rows.append((
                 "Source",
                 f"<span style='color:{accent.current().bright};font-weight:600'>"
-                "&#9670; Config &amp; loadout source</span>",
+                "&#9733; Config &amp; loadout source</span>",
             ))
         if self._color and QColor(self._color).isValid():
             rows.append((
@@ -813,18 +814,22 @@ class AccountCard(QWidget):
             painter.setBrush(QBrush(ban_color))
             painter.drawEllipse(8, self.height() - dot_r * 2 - 8, dot_r * 2, dot_r * 2)
 
-        # config/loadout source mark (bottom-right): a diamond, so it reads
+        # config/loadout source mark (bottom-right): a star, so it reads
         # differently from the round status and ban dots.
         if self.is_cs2_source:
-            r = 6
-            cx, cy = self.width() - r - 8, self.height() - r - 8
+            r = 7
+            cx, cy = self.width() - r - 7, self.height() - r - 7
             mark = QPainterPath()
-            mark.moveTo(cx, cy - r)
-            mark.lineTo(cx + r, cy)
-            mark.lineTo(cx, cy + r)
-            mark.lineTo(cx - r, cy)
+            for i in range(10):
+                rr = r if i % 2 == 0 else r * 0.45
+                a = -math.pi / 2 + i * math.pi / 5
+                pt = QPointF(cx + rr * math.cos(a), cy + rr * math.sin(a))
+                if i == 0:
+                    mark.moveTo(pt)
+                else:
+                    mark.lineTo(pt)
             mark.closeSubpath()
-            painter.setPen(QPen(QColor(self._BASE_R, self._BASE_G, self._BASE_B), 2.0))
+            painter.setPen(QPen(QColor(self._BASE_R, self._BASE_G, self._BASE_B), 1.5))
             painter.setBrush(QBrush(QColor(accent.current().bright)))
             painter.drawPath(mark)
 
