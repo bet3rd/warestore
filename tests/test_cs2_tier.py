@@ -1,7 +1,6 @@
 from warestore.domain.accounts.cs2_tier import (
     NON_PRIME,
     PREMIER,
-    PREMIER_READY,
     PRIME,
     UNKNOWN,
     cs2_tier,
@@ -12,8 +11,8 @@ def test_premier_rating_wins_over_everything():
     assert cs2_tier(prime=-1, level=-1, premier_rating=12_480) == PREMIER
 
 
-def test_prime_level_ten_is_premier_ready():
-    assert cs2_tier(prime=1, level=10, premier_rating=-1) == PREMIER_READY
+def test_prime_level_ten_is_premier_even_without_a_rating():
+    assert cs2_tier(prime=1, level=10, premier_rating=-1) == PREMIER
 
 
 def test_prime_below_ten_is_prime():

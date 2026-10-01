@@ -90,9 +90,9 @@ def _tier_card(tier):
 
 def test_tier_filter(_app):
     g = AccountGrid()
-    g.set_filters(colors=set(), no_cooldown=False, no_bans=False, tiers={"prime", "premier_ready"})
+    g.set_filters(colors=set(), no_cooldown=False, no_bans=False, tiers={"prime", "premier"})
     assert g.has_active_filters() is True
     assert g._card_matches(_tier_card("prime")) is True
-    assert g._card_matches(_tier_card("premier_ready")) is True
+    assert g._card_matches(_tier_card("premier")) is True
     assert g._card_matches(_tier_card("non_prime")) is False
     assert g._card_matches(_tier_card("unknown")) is False
