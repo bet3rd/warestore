@@ -265,8 +265,7 @@ class SettingsPanel:
 
         layout.addWidget(SectionLabel("CS2 Account Check"))
         check_hint = QLabel(
-            "What happens when a token is added — one sign-in to Steam's servers, "
-            "invisible to friends. Right-click → CS2 → Check account refreshes stats later."
+            "Runs when a token is added. Invisible to friends."
         )
         check_hint.setObjectName("info")
         check_hint.setWordWrap(True)
