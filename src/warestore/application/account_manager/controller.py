@@ -10,6 +10,12 @@ import os
 import sys
 from collections.abc import Callable
 
+from warestore.application.account_manager.account_check import (
+    AccountCheckService,
+    CheckResult,
+    CheckSteps,
+    SourceLoadout,
+)
 from warestore.application.account_manager.facade import AccountManagerFacade
 from warestore.domain.accounts.activity import format_last_played as format_last_played_label
 from warestore.domain.accounts.cooldown import format_cooldown_remaining
@@ -475,6 +481,46 @@ class AccountManagerController:
             "cooldown_expires_unix": rank.cooldown_expires_unix,
             "cooldown_reason": rank.cooldown_reason,
         }
+
+    # --- account check -------------------------------------------------------
+
+    def _account_check_service(self) -> AccountCheckService:
+        if getattr(self, "_account_check", None) is None:
+            self._account_check = AccountCheckService(
+                token_for=lambda sid: self.saved_token_entry(sid).get("token", ""),
+                name_for=lambda sid: self.saved_token_entry(sid).get("username", "") or sid,
+                source_steam_id=self.cs2_config_source,
+                metadata=self._facade.metadata,
+            )
+        return self._account_check
+
+    def account_check_steps(self) -> CheckSteps:
+        return CheckSteps.from_settings(self.load_settings())
+
+    def read_source_loadout(self) -> SourceLoadout:
+        """Source loadout for the account check. Must run off the Qt thread."""
+        return self._account_check_service().read_source_loadout()
+
+    def check_account(
+        self,
+        steam_id: str,
+        *,
+        source: SourceLoadout,
+        steps: CheckSteps | None = None,
+        deadline: float | None = None,
+    ) -> CheckResult:
+        """One CS2 server session for the account. Must run off the Qt thread."""
+        return self._account_check_service().check(
+            steam_id, steps or self.account_check_steps(), source, deadline=deadline
+        )
+
+    def steam_id_for_entry(self, raw_entry: str) -> str:
+        """SteamID64 from a ``username----JWT`` / bare JWT entry ('' if unreadable)."""
+        try:
+            jwt = self._facade.parser.jwt_from_entry(raw_entry)
+            return self._facade.jwt.decode_steam_id(jwt) or ""
+        except Exception:  # noqa: BLE001
+            return ""
 
     def validate_api_key(self, key: str) -> str:
         """Return "valid", "invalid", or "error" for a Steam Web API key."""
