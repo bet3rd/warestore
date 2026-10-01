@@ -12,6 +12,9 @@ from PyQt5.QtWidgets import QApplication, QFileDialog, QWidget
 
 from warestore.application.account_manager.controller import AccountManagerController
 from warestore.application.account_manager.presenter import AccountManagerPresenter
+from warestore.presentation.account_manager.features.accounts.account_check_worker import (
+    AccountCheckWorker,
+)
 from warestore.presentation.account_manager.features.accounts.cs2_rank_worker import (
     Cs2RankWorker,
 )
@@ -68,6 +71,11 @@ class AccountCoordinator:
         # -> prompted for removal when the batch finishes.
         self._cs2_dead: list[dict] = []
         self._cs2_current: dict | None = None
+
+        self._check_worker: AccountCheckWorker | None = None
+        self._check_names: dict[str, str] = {}
+        self._check_stats = {"done": 0, "pending": 0, "dead": 0, "failed": 0}
+        self._check_dead: list[dict] = []
 
     @property
     def selected_account(self) -> dict | None:
@@ -455,3 +463,76 @@ class AccountCoordinator:
         if removed:
             self.load_accounts()
             self._info.setText(f"Removed {removed} dead account(s).")
+
+    # --- account check ---------------------------------------------------------
+
+    def check_accounts(self, accounts) -> None:
+        """Right-click "Check account": queue one CS2 server session per account."""
+        targets = [
+            acc for acc in normalize_account_targets(accounts)
+            if acc.get("steamid") and self._ctrl.saved_token_entry(acc["steamid"]).get("token")
+        ]
+        if not targets:
+            self._info.setText("No saved tokens for the selected account(s) — can't check.")
+            return
+        if self._check_worker is None:
+            self._check_worker = AccountCheckWorker(self._ctrl)
+            self._check_worker.started_account.connect(self._on_check_started)
+            self._check_worker.finished_account.connect(self._on_check_finished)
+            self._check_worker.drained.connect(self._on_checks_drained)
+        for acc in targets:
+            self._check_names[acc["steamid"]] = acc.get("account_name", "") or acc["steamid"]
+        added = self._check_worker.enqueue([acc["steamid"] for acc in targets])
+        if not added:
+            self._info.setText("Already checking those account(s)…")
+
+    def _card_for(self, steam_id: str):
+        return next((c for c in self._grid.cards() if c.acc.get("steamid", "") == steam_id), None)
+
+    def _on_check_started(self, steam_id: str) -> None:
+        card = self._card_for(steam_id)
+        if card:
+            card.set_checking(True)
+        self._info.setText(f"Checking {self._check_names.get(steam_id, steam_id)}…")
+
+    def _on_check_finished(self, steam_id: str, result) -> None:
+        card = self._card_for(steam_id)
+        if card:
+            card.set_checking(False)
+        name = self._check_names.get(steam_id, steam_id)
+        if result is None:
+            self._check_stats["failed"] += 1
+        elif result.token_dead:
+            self._check_stats["dead"] += 1
+            self._check_dead.append({"steamid": steam_id, "name": name, "reason": "Logon rejected"})
+        elif result.in_use:
+            self._check_stats["pending"] += 1
+        else:
+            self._check_stats["done"] += 1
+            if card and result.stats_ok:
+                card.set_premier_and_cooldown(
+                    result.premier_rating, result.premier_wins, result.cooldown_expires
+                )
+                card.acc["premier_rating"] = result.premier_rating
+                card.acc["premier_wins"] = result.premier_wins
+                card.acc["cs2_cooldown_expires"] = result.cooldown_expires
+        if result is not None:
+            self._info.setText(f"{name}: {result.summary()}")
+        self.apply_card_metadata()
+
+    def _on_checks_drained(self) -> None:
+        s = self._check_stats
+        total = sum(s.values())
+        if total > 1:
+            parts = [f"{s['done']} checked"]
+            if s["pending"]:
+                parts.append(f"{s['pending']} pending (in use)")
+            if s["dead"]:
+                parts.append(f"{s['dead']} not working")
+            if s["failed"]:
+                parts.append(f"{s['failed']} failed")
+            self._info.setText("Account check: " + ", ".join(parts) + ".")
+        self._check_stats = {"done": 0, "pending": 0, "dead": 0, "failed": 0}
+        if self._check_dead:
+            self._cs2_dead, self._check_dead = self._check_dead, []
+            self._prompt_dead_accounts()

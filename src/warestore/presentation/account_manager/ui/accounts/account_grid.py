@@ -39,6 +39,7 @@ class AccountGrid(QWidget):
     cs2_source_set_requested = pyqtSignal(object)
     cs2_apply_requested = pyqtSignal(object)
     cs2_rank_requested = pyqtSignal(object)
+    check_requested = pyqtSignal(object)
     hwid_reset_requested = pyqtSignal(object)
 
     def __init__(self, parent=None):

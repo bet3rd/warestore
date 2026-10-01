@@ -62,6 +62,7 @@ def show_account_card_menu(
     on_cs2_apply=None,
     on_reset_hwid=None,
     on_cs2_rank=None,
+    on_check=None,
     has_hwid_profile: bool = False,
 ) -> None:
     multi = len(targets) > 1
@@ -110,6 +111,15 @@ def show_account_card_menu(
         # Mints a web session per account and fetches ranks sequentially. Needs at
         # least one target with a saved token (export_count counts those).
         act_cs2_rank.setEnabled(export_count > 0)
+
+    act_check = None
+    if on_check is not None:
+        act_check = menu.addAction(
+            f"Check {export_count} accounts" if multi else "Check account"
+        )
+        # One CS2 server session per account; needs a saved token.
+        act_check.setEnabled(export_count > 0)
+
     menu.addSeparator()
 
     color_menu = menu.addMenu(f"Color tag ({len(targets)})" if multi else "Color tag")
@@ -196,6 +206,8 @@ def show_account_card_menu(
         webbrowser.open(f"https://steamcommunity.com/profiles/{steam_id}")
     elif act_cs2_rank is not None and chosen == act_cs2_rank and export_count > 0:
         on_cs2_rank(targets)
+    elif act_check is not None and chosen == act_check and export_count > 0:
+        on_check(targets)
     elif act_cs2_source is not None and chosen == act_cs2_source and not multi and steam_id:
         on_cs2_source_set(account)
     elif act_cs2_apply is not None and chosen == act_cs2_apply:
