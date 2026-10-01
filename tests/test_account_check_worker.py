@@ -61,3 +61,43 @@ def test_worker_rereads_when_the_source_setting_changes():
     worker._queue.add(["b"])
     worker.run()
     assert ctrl.source_reads == 2 and ctrl.checked[-1] == ("b", "src2")
+
+
+def test_check_and_rank_sweep_dead_lists_stay_separate():
+    """Verify that when both check and rank sweeps are in flight, dead accounts
+    from each are handled separately and not lost."""
+    from warestore.presentation.account_manager.features.accounts.coordinator import (
+        AccountCoordinator,
+    )
+
+    # Build a minimal coordinator without full init
+    coord = AccountCoordinator.__new__(AccountCoordinator)
+    coord._check_stats = {"done": 0, "pending": 0, "dead": 1, "failed": 0}
+    coord._check_dead = [{"steamid": "check_dead", "name": "Check Dead"}]
+    coord._cs2_dead = [{"steamid": "rank_dead", "name": "Rank Dead"}]
+
+    # Fake info label
+    class FakeInfo:
+        def setText(self, text):
+            self.text = text
+
+    coord._info = FakeInfo()
+
+    # Record what _prompt_dead_accounts was called with
+    prompted_dead = []
+
+    def fake_prompt(dead: list[dict]):
+        prompted_dead.append(dead[:])  # copy the list
+
+    coord._prompt_dead_accounts = fake_prompt
+
+    # Drain the check queue
+    coord._on_checks_drained()
+
+    # Verify: the prompt got only the check's dead account
+    assert len(prompted_dead) == 1
+    assert prompted_dead[0] == [{"steamid": "check_dead", "name": "Check Dead"}]
+    # And the rank sweep's dead account is still in _cs2_dead
+    assert coord._cs2_dead == [{"steamid": "rank_dead", "name": "Rank Dead"}]
+    # And check_dead was cleared
+    assert coord._check_dead == []

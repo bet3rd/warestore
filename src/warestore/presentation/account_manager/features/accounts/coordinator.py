@@ -435,15 +435,14 @@ class AccountCoordinator:
         # Only prompt for removal after a multi-account sweep — a single
         # right-click fetch just reports the dead token in the status bar.
         if self._cs2_dead and self._cs2_batch_total > 1:
-            self._prompt_dead_accounts()
+            dead, self._cs2_dead = self._cs2_dead, []
+            self._prompt_dead_accounts(dead)
 
-    def _prompt_dead_accounts(self) -> None:
-        """Offer to remove accounts flagged dead during the sweep (expired token
+    def _prompt_dead_accounts(self, dead: list[dict]) -> None:
+        """Offer to remove accounts flagged dead during a sweep (expired token
         or a logon Steam rejected). Removal purges the login entry + token."""
         from warestore.presentation.account_manager.ui.dialogs import DeadAccountsDialog
 
-        dead = self._cs2_dead
-        self._cs2_dead = []
         dialog = DeadAccountsDialog(
             self._parent,
             dead,
@@ -534,5 +533,5 @@ class AccountCoordinator:
             self._info.setText("Account check: " + ", ".join(parts) + ".")
         self._check_stats = {"done": 0, "pending": 0, "dead": 0, "failed": 0}
         if self._check_dead:
-            self._cs2_dead, self._check_dead = self._check_dead, []
-            self._prompt_dead_accounts()
+            dead, self._check_dead = self._check_dead, []
+            self._prompt_dead_accounts(dead)
