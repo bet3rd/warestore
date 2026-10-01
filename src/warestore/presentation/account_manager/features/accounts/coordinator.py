@@ -397,20 +397,10 @@ class AccountCoordinator:
             if card:
                 card.set_check_state("queued")
 
-    def check_account_menu(self, accounts) -> None:
-        """Right-click "Check account": the user's Stats/Workshop settings, but
-        never the loadout — that's copied only on token add and Override Config."""
-        settings = self._ctrl.account_check_steps()
-        steps = CheckSteps(loadout=False, stats=settings.stats, workshop=settings.workshop)
-        if not (steps.stats or steps.workshop):
-            self._info.setText("Nothing to check — Stats and Workshop are both off in Settings.")
-            return
-        self.check_accounts(accounts, steps=steps)
-
     def refresh_stats(self, accounts) -> None:
-        """Right-click "Refresh stats" / the main-panel button: a stats-only
-        check (profile + cooldown + GCPD) — no Workshop clear, no loadout
-        write."""
+        """Right-click "Check account" / the main-panel button / launch: a
+        stats-only check (profile, cooldown, GCPD, medals). Workshop clearing
+        only happens on token add, the loadout on token add and Override Config."""
         self.check_accounts(accounts, steps=CheckSteps(loadout=False, workshop=False, stats=True))
 
     def refresh_all_stats(self) -> None:

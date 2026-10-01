@@ -38,7 +38,6 @@ class AccountGrid(QWidget):
     color_set_requested = pyqtSignal(object, str)
     cs2_source_set_requested = pyqtSignal(object)
     cs2_apply_requested = pyqtSignal(object)
-    stats_requested = pyqtSignal(object)
     check_requested = pyqtSignal(object)
     hwid_reset_requested = pyqtSignal(object)
 

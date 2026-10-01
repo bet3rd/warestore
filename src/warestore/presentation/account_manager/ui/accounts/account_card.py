@@ -1115,7 +1115,6 @@ class AccountCard(QWidget):
             on_color_set=grid.color_set_requested.emit,
             on_cs2_source_set=grid.cs2_source_set_requested.emit,
             on_cs2_apply=grid.cs2_apply_requested.emit,
-            on_refresh_stats=grid.stats_requested.emit,
             on_check=grid.check_requested.emit,
             on_reset_hwid=grid.hwid_reset_requested.emit,
             has_hwid_profile=self._menu_state.has_hwid_profile,

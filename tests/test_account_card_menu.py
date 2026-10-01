@@ -45,7 +45,7 @@ def _open_menu(monkeypatch, **kw):
         on_switch=noop, on_relogin=noop, on_copy_export=noop, on_export_file=noop,
         on_delete=noop, on_cooldown_set=noop, on_cooldown_custom=noop, on_color_set=noop,
         on_cs2_source_set=noop, on_cs2_apply=noop, on_reset_hwid=noop,
-        on_refresh_stats=noop, on_check=noop, **kw,
+        on_check=noop, **kw,
     )
     return seen["layout"]
 
@@ -66,5 +66,5 @@ def test_copy_and_cs2_submenus(_app, monkeypatch):
         "Username", "Friend code", "-", "Export token to clipboard", "Export token to file…",
     ]
     assert subs["CS2"] == [
-        "Check account", "Refresh stats", "-", "Set as config source", "Override config + loadout",
+        "Check account", "-", "Set as config source", "Override config + loadout",
     ]

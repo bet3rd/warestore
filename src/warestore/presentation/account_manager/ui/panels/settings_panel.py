@@ -333,8 +333,8 @@ class SettingsPanel:
 
         layout.addWidget(SectionLabel("CS2 Account Check"))
         check_hint = QLabel(
-            "One sign-in to Steam's servers when an account is added (right-click "
-            "→ Check account runs it later, without the loadout). Invisible to friends."
+            "What happens when a token is added — one sign-in to Steam's servers, "
+            "invisible to friends. Right-click → CS2 → Check account refreshes stats later."
         )
         check_hint.setObjectName("info")
         check_hint.setWordWrap(True)
@@ -353,7 +353,8 @@ class SettingsPanel:
             "Needs the source account to have a saved token."
         )
         self.cb_check_workshop.setToolTip(
-            "Unsubscribes the account from all CS2 Workshop items. Permanent."
+            "Unsubscribes the account from all CS2 Workshop items when a token\n"
+            "is added. Permanent."
         )
         self._add_separator(layout)
 

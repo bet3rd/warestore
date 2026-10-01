@@ -61,7 +61,6 @@ def show_account_card_menu(
     on_cs2_source_set=None,
     on_cs2_apply=None,
     on_reset_hwid=None,
-    on_refresh_stats=None,
     on_check=None,
     has_hwid_profile: bool = False,
 ) -> None:
@@ -107,20 +106,15 @@ def show_account_card_menu(
 
     # CS2: server checks (one session per account, needs a saved token —
     # export_count counts those) and the config/loadout source.
-    act_check = act_refresh_stats = act_cs2_source = act_cs2_apply = None
-    if any(cb is not None for cb in (on_check, on_refresh_stats, on_cs2_source_set, on_cs2_apply)):
+    act_check = act_cs2_source = act_cs2_apply = None
+    if any(cb is not None for cb in (on_check, on_cs2_source_set, on_cs2_apply)):
         cs2_menu = menu.addMenu(f"CS2 ({len(targets)})" if multi else "CS2")
         if on_check is not None:
             act_check = cs2_menu.addAction(
                 f"Check {export_count} accounts" if multi else "Check account"
             )
             act_check.setEnabled(export_count > 0)
-        if on_refresh_stats is not None:
-            act_refresh_stats = cs2_menu.addAction(
-                f"Refresh stats ({export_count})" if multi else "Refresh stats"
-            )
-            act_refresh_stats.setEnabled(export_count > 0)
-        if (act_check or act_refresh_stats) and (on_cs2_source_set or on_cs2_apply):
+        if act_check and (on_cs2_source_set or on_cs2_apply):
             cs2_menu.addSeparator()
         if on_cs2_source_set is not None:
             act_cs2_source = cs2_menu.addAction("Set as config source")
@@ -188,8 +182,6 @@ def show_account_card_menu(
         on_export_file(targets)
     elif chosen == act_profile and steam_id and not multi:
         webbrowser.open(f"https://steamcommunity.com/profiles/{steam_id}")
-    elif act_refresh_stats is not None and chosen == act_refresh_stats and export_count > 0:
-        on_refresh_stats(targets)
     elif act_check is not None and chosen == act_check and export_count > 0:
         on_check(targets)
     elif act_cs2_source is not None and chosen == act_cs2_source and not multi and steam_id:

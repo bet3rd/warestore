@@ -340,16 +340,6 @@ def _menu_coord(settings_steps):
     return coord
 
 
-def test_check_account_never_copies_the_loadout():
-    coord = _menu_coord(CheckSteps(loadout=True, stats=True, workshop=True))
-    coord.check_account_menu([{"steamid": "a"}])
-    assert coord.queued == [(["a"], CheckSteps(loadout=False, stats=True, workshop=True))]
-
-
-def test_check_account_with_nothing_left_to_do_says_so():
-    coord = _menu_coord(CheckSteps(loadout=True, stats=False, workshop=False))
-    coord.check_account_menu([{"steamid": "a"}])
-    assert coord.queued == [] and "nothing" in coord._info.text.lower()
 
 
 def test_override_config_also_copies_the_loadout():
@@ -423,3 +413,10 @@ def test_coordinator_stops_the_queue_and_warns_on_a_rate_limit():
     coord._on_checks_drained()
     assert warned == [1]
     assert "VPN" in coord._info.text
+
+
+
+def test_check_account_is_a_stats_only_check():
+    coord = _menu_coord(CheckSteps(loadout=True, stats=True, workshop=True))
+    coord.refresh_stats([{"steamid": "a"}])
+    assert coord.queued == [(["a"], STATS_ONLY)]
