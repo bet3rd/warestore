@@ -392,7 +392,7 @@ class AccountCoordinator:
                 # Wingman, and the cooldown are each updated independently,
                 # only when that step actually answered this check.
                 premier_arrived = result.profile_ok or result.gcpd_ok
-                if premier_arrived or result.gcpd_ok or result.cooldown_ok:
+                if premier_arrived or result.cooldown_ok:
                     card.set_check_update(
                         premier_rating=result.premier_rating if premier_arrived else None,
                         premier_wins=result.premier_wins if premier_arrived else None,

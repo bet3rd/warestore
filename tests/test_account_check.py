@@ -155,6 +155,41 @@ def test_gc_unavailable_fails_every_step(svc):
     assert meta.calls == []
 
 
+def test_in_use_detected_mid_cooldown_cycle_stops_the_check(svc):
+    """Fix round 1 (1): AccountInUseError raised by the cooldown leave/
+    re-enter cycle must reach check()'s own in-use handling, not be recorded
+    as a plain failed "stats" step — Workshop/loadout must never run against
+    an account that turned out to be playing elsewhere mid-check."""
+    service, meta = svc
+    FakeSession.script = {"cooldown_seconds": AccountInUseError("playing on another device")}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.in_use and result.in_use_reason == "playing on another device"
+    assert "workshop" not in result.outcomes and "loadout" not in result.outcomes
+    assert "clear_workshop" not in FakeSession.last.calls
+    assert "write_loadout" not in FakeSession.last.calls
+    assert meta.calls[-1] == (TARGET, {"pending": True})
+
+
+def test_cooldown_time_limit_during_cycle_keeps_profile_data_and_tries_gcpd(svc):
+    """Fix round 1 (2): a budget/deadline GcUnavailableError raised mid-cycle
+    in cooldown_seconds() must be treated like a plain "didn't answer" — the
+    profile data that already arrived must still save, and GCPD must still be
+    attempted."""
+    service, meta = svc
+    FakeSession.script = {"cooldown_seconds": GcUnavailableError("time limit")}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert FakeSession.last.calls[:3] == ["profile", "cooldown_seconds", "gcpd_rank"]
+    assert result.outcomes["stats"].status == "ok"
+    assert result.profile_ok and result.cs2_level == 6 and result.premier_rating == 15_000
+    assert not result.cooldown_ok
+    # the rest of the check still ran — this was not treated as fatal
+    assert "clear_workshop" in FakeSession.last.calls
+    assert "write_loadout" in FakeSession.last.calls
+    sid, kw = meta.calls[-1]
+    assert kw["cs2_level"] == 6 and kw["premier_rating"] == 15_000
+    assert "cooldown_expires" not in kw
+
+
 def test_deadline_skips_remaining_steps(svc):
     service, _ = svc
     times = iter([0.0])  # first read (before stats) is in time, every later one is not

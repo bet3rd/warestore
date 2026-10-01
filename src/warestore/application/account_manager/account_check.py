@@ -234,6 +234,12 @@ class AccountCheckService:
                 continue
             try:
                 outcome = run()
+            except AccountInUseError:
+                # Must reach check()'s own handler (in_use=True, pending saved,
+                # no further steps) rather than being recorded as a plain
+                # failed step — the account turned out to be in use mid-check
+                # (e.g. the cooldown cycle's leave/re-enter detected it).
+                raise
             except Exception as exc:  # noqa: BLE001 - one step never stops the rest
                 outcome = StepOutcome("failed", type(exc).__name__)
             result.outcomes[name] = outcome
@@ -241,8 +247,20 @@ class AccountCheckService:
                 logger.warning("account-check: %s — %s failed: %s", acct_name, name, outcome.detail or "failed")
 
     def _stats(self, session, result: CheckResult, name: str) -> StepOutcome:
-        profile = session.profile()
-        cooldown = session.cooldown_seconds()
+        # A GcUnavailableError mid-call (a budget/deadline running out partway
+        # through profile()'s wait or cooldown_seconds()'s leave/re-enter cycle)
+        # is just that particular reply not arriving in time — it must not
+        # discard a reply that already did arrive, nor skip GCPD.
+        # AccountInUseError is NOT caught here: it must propagate (see
+        # _run_steps) to check()'s own in-use handling.
+        try:
+            profile = session.profile()
+        except GcUnavailableError:
+            profile = None
+        try:
+            cooldown = session.cooldown_seconds()
+        except GcUnavailableError:
+            cooldown = None
         try:
             gcpd = session.gcpd_rank()
         except Exception as exc:  # noqa: BLE001 - GCPD is best-effort; GC data must still save
