@@ -187,6 +187,10 @@ class SettingsCoordinator:
         self._settings["spoof_on_login"] = checked
         self._ctrl.save_settings(self._settings)
 
+    def on_account_check_toggle(self, key: str, checked: bool) -> None:
+        self._settings[key] = checked
+        self._ctrl.save_settings(self._settings)
+
     def refresh_spoofer_state(self) -> None:
         self._ui.set_spoofer_installed(self._ctrl.spoofer_installed())
 

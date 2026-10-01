@@ -95,6 +95,10 @@ class SettingsPanel:
         self.cb_spoof = QCheckBox("Run HWID spoofer on login")
         self.btn_install_spoofer = QPushButton("Install spoofer")
         self.spoofer_row = QWidget()
+        self.cb_check_on_add = QCheckBox("Check account when added")
+        self.cb_check_loadout = QCheckBox("Copy loadout from CS2 source")
+        self.cb_check_stats = QCheckBox("Fetch stats (Premier, CS2 level, cooldown)")
+        self.cb_check_workshop = QCheckBox("Clear Workshop subscriptions")
         self.cb_close_to_tray = QCheckBox("Close to tray (X hides window)")
         self.cb_auto_remove_expired = QCheckBox("Remove expired tokens on refresh")
         self.cb_gcpd_on_launch = QCheckBox("Fetch CS2 ranks on launch")
@@ -325,6 +329,31 @@ class SettingsPanel:
         layout = _outer_layout
         layout.addWidget(startup_box)
 
+        self._add_separator(layout)
+
+        layout.addWidget(SectionLabel("Account Check"))
+        check_hint = QLabel(
+            "One sign-in to Steam's servers when an account is added (right-click "
+            "→ Check account runs it later). Invisible to friends."
+        )
+        check_hint.setObjectName("info")
+        check_hint.setWordWrap(True)
+        layout.addWidget(check_hint)
+        for cb, key in (
+            (self.cb_check_on_add, "account_check_on_add"),
+            (self.cb_check_loadout, "account_check_loadout"),
+            (self.cb_check_stats, "account_check_stats"),
+            (self.cb_check_workshop, "account_check_workshop"),
+        ):
+            cb.setChecked(bool(self._settings.get(key, True)))
+            layout.addWidget(cb)
+        self.cb_check_loadout.setToolTip(
+            "Copies the CS2 config source account's weapon picks (not skins).\n"
+            "Needs the source account to have a saved token."
+        )
+        self.cb_check_workshop.setToolTip(
+            "Unsubscribes the account from all CS2 Workshop items. Permanent."
+        )
         self._add_separator(layout)
 
         layout.addWidget(SectionLabel("Display"))

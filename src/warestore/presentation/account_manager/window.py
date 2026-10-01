@@ -235,6 +235,15 @@ class MainWindow(QMainWindow):
         su.cb_gcpd_on_launch.toggled.connect(
             self._settings_coord.on_gcpd_check_toggle
         )
+        for cb, key in (
+            (su.cb_check_on_add, "account_check_on_add"),
+            (su.cb_check_loadout, "account_check_loadout"),
+            (su.cb_check_stats, "account_check_stats"),
+            (su.cb_check_workshop, "account_check_workshop"),
+        ):
+            cb.toggled.connect(
+                lambda checked, k=key: self._settings_coord.on_account_check_toggle(k, checked)
+            )
         su.cmb_dpi.currentIndexChanged.connect(self._settings_coord.on_dpi_scale_change)
         for swatch in [*su.accent_swatches, su.accent_custom_swatch]:
             swatch.clicked.connect(self._settings_coord.on_accent_pick)
