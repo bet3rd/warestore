@@ -3,7 +3,7 @@
 
 import os
 
-from PyQt5.QtCore import QPointF, QRectF, QSize, Qt, QUrl
+from PyQt5.QtCore import QPointF, QRectF, QSize, Qt, QTimer, QUrl
 from PyQt5.QtGui import (
     QBrush,
     QColor,
@@ -264,6 +264,12 @@ class MainPanel:
         self._log_panel.setFixedHeight(self.LOG_PANEL_H)
         self._log_panel.setVisible(False)
         layout.addWidget(self._log_panel)
+        # Lines arrive from worker threads (account checks, status fetches), so
+        # the open panel polls the log's version instead of being pushed to.
+        self._log_version = -1
+        self._log_timer = QTimer(self._log_panel)
+        self._log_timer.setInterval(500)
+        self._log_timer.timeout.connect(self._poll_log)
 
         self.header = header
         self._body = body
@@ -415,7 +421,23 @@ class MainPanel:
             return
         from warestore.presentation.account_manager.support.app_log import app_log
 
+        bar = self._log_panel.verticalScrollBar()
+        at_bottom = bar.value() >= bar.maximum() - 2
+        keep = bar.value()
+        self._log_version = app_log.version
         self._log_panel.setPlainText("\n".join(app_log.lines()[-80:]))
+        # Follow new lines, unless the user scrolled up to read something.
+        bar.setValue(bar.maximum() if at_bottom else keep)
+
+    def _poll_log(self) -> None:
+        from warestore.presentation.account_manager.support.app_log import app_log
+
+        if app_log.version != self._log_version:
+            self.refresh_log()
 
     def set_log_visible(self, visible: bool) -> None:
         self._log_panel.setVisible(visible)
+        if visible:
+            self._log_timer.start()
+        else:
+            self._log_timer.stop()
