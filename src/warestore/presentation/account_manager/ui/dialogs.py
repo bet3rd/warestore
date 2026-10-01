@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
 )
 
@@ -384,18 +385,23 @@ class RejectedTokenDialog(QDialog):
         self.setFixedWidth(360)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 22, 24, 20)
-        layout.setSpacing(10)
+        # Top is 4px less than the bottom: the title font's own space above
+        # the capitals makes up the difference, so the margins read as even.
+        layout.setContentsMargins(24, 16, 24, 20)
+        layout.setSpacing(6)
 
         title = QLabel("Steam rejected this token")
         title.setObjectName("dialog_title")
-        layout.addWidget(title)
-
         msg = QLabel("Keep the account anyway? It probably can't log in.")
         msg.setObjectName("info")
         msg.setWordWrap(True)
-        layout.addWidget(msg)
-        layout.addSpacing(6)
+        for label in (title, msg):
+            # No inherited padding/min-height: both lines start on the same
+            # left edge and sit tight, so the panel's margins read as even.
+            label.setStyleSheet("padding: 0; margin: 0; min-height: 0;")
+            label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            layout.addWidget(label)
+        layout.addSpacing(10)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
