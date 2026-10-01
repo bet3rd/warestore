@@ -101,7 +101,7 @@ class SettingsPanel:
         self.cb_check_workshop = QCheckBox("Clear Workshop subscriptions")
         self.cb_close_to_tray = QCheckBox("Close to tray (X hides window)")
         self.cb_auto_remove_expired = QCheckBox("Remove expired tokens on refresh")
-        self.cb_gcpd_on_launch = QCheckBox("Fetch CS2 ranks on launch")
+        self.cb_gcpd_on_launch = QCheckBox("Refresh CS2 stats on launch")
         self.cb_exclude_capture = QCheckBox("Hide from screen capture (Discord, OBS)")
         self.cmb_dpi = QComboBox()
         self.accent_swatches = [ColorSwatch(hx, name) for name, hx in ACCENT_PRESETS]
@@ -296,9 +296,9 @@ class SettingsPanel:
             self._settings.get("gcpd_check_on_launch", False)
         )
         self.cb_gcpd_on_launch.setToolTip(
-            "On startup, fetches each account's CS2 Premier/Wingman rank and\n"
-            "competitive cooldown from Steam (GCPD), one account at a time.\n"
-            "Only accounts with a saved token are checked."
+            "On startup, runs a stats-only account check for every account —\n"
+            "CS2 level, Premier, Wingman, and competitive cooldown — one at a\n"
+            "time. Only accounts with a saved token are checked."
         )
         gcpd_h.addWidget(self.cb_gcpd_on_launch, 0, Qt.AlignVCenter)
         gcpd_warn = QLabel()

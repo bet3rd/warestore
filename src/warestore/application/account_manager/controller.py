@@ -327,25 +327,6 @@ class AccountManagerController:
         """Cache fetched persona names + avatar hashes for next-launch display."""
         self._facade.metadata.set_profiles(profiles)
 
-    def persist_cs2_rank(
-        self,
-        steam_id: str,
-        premier_rating: int,
-        wingman_rank: int,
-        cooldown_expires: int,
-        premier_wins: int = -1,
-        wingman_wins: int = -1,
-    ) -> None:
-        """Cache an on-demand CS2 rank fetch so it survives a grid reload."""
-        self._facade.metadata.set_cs2_rank(
-            steam_id,
-            premier_rating,
-            wingman_rank,
-            cooldown_expires,
-            premier_wins,
-            wingman_wins,
-        )
-
     def set_last_played(self, steam_id: str, played: bool = True) -> None:
         self._facade.metadata.set_last_played(steam_id, played)
 
@@ -458,29 +439,6 @@ class AccountManagerController:
     def fetch_levels(self, steam_ids: list[str]) -> dict[str, int]:
         api_key = self.load_settings().get("steam_api_key", "")
         return self._facade.levels.fetch_levels(api_key, steam_ids)
-
-    def fetch_cs2_rank(self, steam_id: str, refresh_token: str) -> dict | None:
-        """On-demand CS2 Premier/Wingman rank + competitive cooldown for one account.
-
-        Safe path only: the cookie is minted by a CM logon (the local steam-user
-        service), then GCPD is scraped read-only. Never calls the token-consuming
-        auth endpoints. Returns None on any failure.
-        """
-        try:
-            sid = int(steam_id)
-        except (TypeError, ValueError):
-            return None
-        rank = self._facade.cs2_rank.fetch(sid, refresh_token)
-        if rank is None:
-            return None
-        return {
-            "premier_rating": rank.premier_rating,
-            "premier_wins": rank.premier_wins,
-            "wingman_rank": rank.wingman_rank,
-            "wingman_wins": rank.wingman_wins,
-            "cooldown_expires_unix": rank.cooldown_expires_unix,
-            "cooldown_reason": rank.cooldown_reason,
-        }
 
     # --- account check -------------------------------------------------------
 

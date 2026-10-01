@@ -15,26 +15,40 @@ import threading
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from warestore.application.account_manager.account_check import SourceLoadout
+from warestore.application.account_manager.account_check import CheckSteps, SourceLoadout
 
 logger = logging.getLogger(__name__)
 
 
 class AccountCheckQueue:
+    """FIFO of (steam_id, steps) pairs. ``steps=None`` means "whatever the
+    user's settings say" — today's "Check account" behaviour, treated here as
+    the strongest/"full" level. A re-enqueue of an id already queued upgrades
+    a more limited steps value (e.g. "Refresh stats") to that full level, but
+    never downgrades a full item to a more limited one."""
+
     def __init__(self) -> None:
-        self._items: list[str] = []
+        self._items: dict[str, CheckSteps | None] = {}
         self._current: str | None = None
 
-    def add(self, steam_ids: list[str]) -> int:
+    def add(self, steam_ids: list[str], steps: CheckSteps | None = None) -> int:
         added = 0
         for sid in steam_ids:
-            if sid and sid != self._current and sid not in self._items:
-                self._items.append(sid)
-                added += 1
+            if not sid or sid == self._current:
+                continue
+            if sid in self._items:
+                if self._items[sid] is not None and steps is None:
+                    self._items[sid] = None  # upgrade to full; never downgrade
+                continue
+            self._items[sid] = steps
+            added += 1
         return added
 
-    def pop(self) -> str | None:
-        return self._items.pop(0) if self._items else None
+    def pop(self) -> tuple[str, CheckSteps | None] | None:
+        if not self._items:
+            return None
+        sid = next(iter(self._items))
+        return sid, self._items.pop(sid)
 
     def set_current(self, sid: str | None) -> None:
         self._current = sid
@@ -57,9 +71,9 @@ class AccountCheckWorker(QThread):
         # A batch enqueued while run() is exiting would otherwise sit unprocessed.
         self.finished.connect(self._restart_if_pending)
 
-    def enqueue(self, steam_ids: list[str]) -> int:
+    def enqueue(self, steam_ids: list[str], steps: CheckSteps | None = None) -> int:
         with self._lock:
-            added = self._queue.add(steam_ids)
+            added = self._queue.add(steam_ids, steps)
         if added and not self.isRunning():
             self.start()
         return added
@@ -70,13 +84,15 @@ class AccountCheckWorker(QThread):
         if pending and not self.isRunning():
             self.start()
 
-    def _source_loadout(self, steam_id: str) -> SourceLoadout:
+    def _source_loadout(self, steam_id: str, steps: CheckSteps | None) -> SourceLoadout:
         """The source loadout for ``steam_id``, read at most once per drain and
-        only when it could matter: the loadout step is on, a source is set,
+        only when it could matter: this item's loadout step is on (falling
+        back to the user's settings when ``steps`` is None), a source is set,
         and this account isn't the source itself (reading it would be a
         pointless extra CM logon — the service already skips the loadout step
         when target == source)."""
-        if not self._ctrl.account_check_steps().loadout:
+        loadout_on = steps.loadout if steps is not None else self._ctrl.account_check_steps().loadout
+        if not loadout_on:
             return SourceLoadout(reason="loadout step off")
         wanted = self._ctrl.cs2_config_source()
         if not wanted:
@@ -90,13 +106,16 @@ class AccountCheckWorker(QThread):
     def run(self) -> None:
         while True:
             with self._lock:
-                sid = self._queue.pop()
+                item = self._queue.pop()
+                sid, steps = item if item is not None else (None, None)
                 self._queue.set_current(sid)
             if sid is None:
                 break
             self.started_account.emit(sid)
             try:
-                result = self._ctrl.check_account(sid, source=self._source_loadout(sid))
+                result = self._ctrl.check_account(
+                    sid, source=self._source_loadout(sid, steps), steps=steps
+                )
             except Exception:  # noqa: BLE001 - never crash the worker thread
                 logger.exception("account-check: worker failed for %s", sid)
                 result = None

@@ -1,20 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 bet3rd
 
-"""In-process, non-destructive Steam web-session cookie mint (replaces server.js).
+"""In-process, non-destructive Steam CM logon + web access token mint.
 
 Given a refresh token, do a CM logon (WebSocket) and mint a web access token via
-``Authentication.GenerateAccessTokenForApp`` over that AUTHENTICATED session, then
-build the ``steamLoginSecure`` cookie. Pure Python via ValvePython/steam — no Node.
+``Authentication.GenerateAccessTokenForApp`` over that AUTHENTICATED session.
+The caller (``Cs2Session``) builds the ``steamLoginSecure`` cookie from the
+token. Pure Python via ValvePython/steam — no Node.
 
 SAFETY: renewal is never requested (ValvePython's bundled proto has no
 ``renewal_type`` field, so the CM defaults to None) — the refresh token is never
 rotated/consumed. This NEVER calls ``/jwt/finalizelogin`` or the token-killing
 HTTP endpoints. See the ``safe-cs2-cookie-mint`` memory for the full rationale.
 
-MUST run off the Qt thread (the caller ``Cs2RankWorker`` is a ``QThread``):
-ValvePython uses gevent, whose hub is thread-local, and we never monkey-patch, so
-the Qt event loop is untouched. ``steam`` is imported lazily for the same reason.
+MUST run off the Qt thread (the caller is the account check, run on a
+``QThread``): ValvePython uses gevent, whose hub is thread-local, and we never
+monkey-patch, so the Qt event loop is untouched. ``steam`` is imported lazily
+for the same reason.
 """
 
 from __future__ import annotations

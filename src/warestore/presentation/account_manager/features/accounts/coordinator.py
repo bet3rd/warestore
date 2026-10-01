@@ -10,13 +10,11 @@ from pathlib import Path
 
 from PyQt5.QtWidgets import QApplication, QFileDialog, QWidget
 
+from warestore.application.account_manager.account_check import CheckSteps
 from warestore.application.account_manager.controller import AccountManagerController
 from warestore.application.account_manager.presenter import AccountManagerPresenter
 from warestore.presentation.account_manager.features.accounts.account_check_worker import (
     AccountCheckWorker,
-)
-from warestore.presentation.account_manager.features.accounts.cs2_rank_worker import (
-    Cs2RankWorker,
 )
 from warestore.presentation.account_manager.features.accounts.status_worker import (
     StatusFetchWorker,
@@ -57,20 +55,6 @@ class AccountCoordinator:
         self._filter = filter_accounts
         self._selected: dict | None = None
         self._status_worker: StatusFetchWorker | None = None
-        self._cs2_rank_worker: Cs2RankWorker | None = None
-        # Sequential CS2 rank queue: minting a web session touches the account,
-        # so ranks are fetched one at a time — the next account only starts once
-        # the previous worker finishes (never concurrently).
-        self._cs2_rank_queue: list[dict] = []
-        self._cs2_batch_total = 0
-        self._cs2_batch_done = 0
-        self._cs2_batch_ok = 0
-        self._cs2_batch_skipped = 0
-        self._cs2_last_on_cooldown = False
-        # Accounts flagged dead during a sweep (expired offline, or logon-rejected)
-        # -> prompted for removal when the batch finishes.
-        self._cs2_dead: list[dict] = []
-        self._cs2_current: dict | None = None
 
         self._check_worker: AccountCheckWorker | None = None
         self._check_names: dict[str, str] = {}
@@ -304,146 +288,6 @@ class AccountCoordinator:
             self._grid.reapply_filters()
             self._sync_layout()
 
-    def fetch_all_cs2_ranks(self) -> None:
-        """Fetch CS2 rank for every account on the grid (sequentially)."""
-        self.fetch_cs2_ranks(self.accounts_on_grid())
-
-    def fetch_cs2_ranks(self, accounts) -> None:
-        """Fetch CS2 rank for one or more accounts, strictly sequentially.
-
-        Minting a web session touches each account, so ranks are fetched one at
-        a time: the next account only starts once the previous worker finishes.
-        Accounts without a saved token are skipped.
-        """
-        if self._cs2_rank_worker and self._cs2_rank_worker.isRunning():
-            self._info.setText("A CS2 rank fetch is already running…")
-            return
-        targets = normalize_account_targets(accounts)
-        queue = [
-            acc
-            for acc in targets
-            if acc.get("steamid", "")
-            and self._ctrl.saved_token_entry(acc["steamid"]).get("token", "")
-        ]
-        if not queue:
-            self._info.setText(
-                "No saved tokens for the selected account(s) — can't fetch rank."
-            )
-            return
-        self._cs2_rank_queue = queue
-        self._cs2_batch_total = len(queue)
-        self._cs2_batch_done = 0
-        self._cs2_batch_ok = 0
-        self._cs2_batch_skipped = len(targets) - len(queue)
-        self._cs2_dead = []
-        self._start_next_cs2_rank()
-
-    def _flag_dead(self, acc: dict, reason: str) -> None:
-        self._cs2_dead.append(
-            {
-                "steamid": acc.get("steamid", ""),
-                "name": acc.get("persona_name")
-                or acc.get("account_name", "")
-                or acc.get("steamid", ""),
-                "reason": reason,
-            }
-        )
-
-    def _start_next_cs2_rank(self) -> None:
-        # Skip accounts whose token is already dead offline (expired / malformed)
-        # — flag them without wasting a CM logon on a token Steam will reject.
-        while self._cs2_rank_queue:
-            acc = self._cs2_rank_queue[0]
-            token = self._ctrl.saved_token_entry(acc.get("steamid", "")).get("token", "")
-            if self._ctrl.verify_token_expiry(token) < 0:
-                self._cs2_rank_queue.pop(0)
-                self._cs2_batch_done += 1
-                self._flag_dead(acc, "Token expired")
-            else:
-                break
-        if not self._cs2_rank_queue:
-            self._finish_cs2_batch()
-            return
-        acc = self._cs2_rank_queue.pop(0)
-        self._cs2_current = acc
-        sid = acc.get("steamid", "")
-        token = self._ctrl.saved_token_entry(sid).get("token", "")
-        name = acc.get("account_name", "") or sid
-        if self._cs2_batch_total > 1:
-            self._info.setText(
-                f"Fetching CS2 rank {self._cs2_batch_done + 1}/{self._cs2_batch_total} — {name}…"
-            )
-        else:
-            self._info.setText(f"Fetching CS2 rank for {name}…")
-        self._cs2_rank_worker = Cs2RankWorker(sid, token, ctrl=self._ctrl)
-        self._cs2_rank_worker.done.connect(self._on_cs2_rank_done)
-        self._cs2_rank_worker.start()
-
-    def _on_cs2_rank_done(self, steam_id: str, data, dead: bool = False) -> None:
-        self._cs2_batch_done += 1
-        if dead:
-            self._flag_dead(self._cs2_current or {"steamid": steam_id}, "Logon rejected")
-        elif data:
-            self._cs2_batch_ok += 1
-            premier = data.get("premier_rating", -1)
-            premier_wins = data.get("premier_wins", -1)
-            wingman = data.get("wingman_rank", -1)
-            wingman_wins = data.get("wingman_wins", -1)
-            cooldown = data.get("cooldown_expires_unix", 0)
-            for card in self._grid.cards():
-                if card.acc.get("steamid", "") != steam_id:
-                    continue
-                card.set_cs2_rank(
-                    premier, wingman, cooldown, premier_wins, wingman_wins
-                )
-                # Keep the acc dict in sync so a later reload re-applies it too.
-                card.acc["premier_rating"] = premier
-                card.acc["premier_wins"] = premier_wins
-                card.acc["wingman_rank"] = wingman
-                card.acc["wingman_wins"] = wingman_wins
-                card.acc["cs2_cooldown_expires"] = cooldown
-                break
-            # Persist so it survives a grid reload / relaunch.
-            self._ctrl.persist_cs2_rank(
-                steam_id, premier, wingman, cooldown, premier_wins, wingman_wins
-            )
-            self._cs2_last_on_cooldown = bool(cooldown)
-        # One failure never aborts the batch — carry on to the next account.
-        self._start_next_cs2_rank()
-
-    def _finish_cs2_batch(self) -> None:
-        total = self._cs2_batch_total
-        ok = self._cs2_batch_ok
-        dead = len(self._cs2_dead)
-        if total <= 1:
-            if ok:
-                self._info.setText(
-                    "CS2 rank updated — competitive cooldown active."
-                    if self._cs2_last_on_cooldown
-                    else "CS2 rank updated."
-                )
-            elif dead:
-                self._info.setText("CS2 rank fetch failed — the token looks dead.")
-            else:
-                self._info.setText(
-                    "CS2 rank fetch failed — check the dev log for details."
-                )
-        else:
-            parts = [f"{ok} updated"]
-            if dead:
-                parts.append(f"{dead} not working")
-            transient = total - ok - dead
-            if transient:
-                parts.append(f"{transient} failed")
-            if self._cs2_batch_skipped:
-                parts.append(f"{self._cs2_batch_skipped} skipped (no token)")
-            self._info.setText("CS2 ranks: " + ", ".join(parts) + ".")
-        # Only prompt for removal after a multi-account sweep — a single
-        # right-click fetch just reports the dead token in the status bar.
-        if self._cs2_dead and self._cs2_batch_total > 1:
-            dead, self._cs2_dead = self._cs2_dead, []
-            self._prompt_dead_accounts(dead)
-
     def _prompt_dead_accounts(self, dead: list[dict]) -> None:
         """Offer to remove accounts flagged dead during a sweep (expired token
         or a logon Steam rejected). Removal purges the login entry + token."""
@@ -471,8 +315,10 @@ class AccountCoordinator:
 
     # --- account check ---------------------------------------------------------
 
-    def check_accounts(self, accounts) -> None:
-        """Right-click "Check account": queue one CS2 server session per account."""
+    def check_accounts(self, accounts, steps: CheckSteps | None = None) -> None:
+        """Right-click "Check account" / "Refresh stats": queue one CS2 server
+        session per account. ``steps=None`` runs whatever the user's settings
+        say (today's "Check account" behaviour)."""
         targets = [
             acc for acc in normalize_account_targets(accounts)
             if acc.get("steamid") and self._ctrl.saved_token_entry(acc["steamid"]).get("token")
@@ -488,7 +334,7 @@ class AccountCoordinator:
         for acc in targets:
             self._check_names[acc["steamid"]] = acc.get("account_name", "") or acc["steamid"]
         new_ids = [acc["steamid"] for acc in targets if acc["steamid"] not in self._check_pending_ids]
-        added = self._check_worker.enqueue([acc["steamid"] for acc in targets])
+        added = self._check_worker.enqueue([acc["steamid"] for acc in targets], steps)
         if not added:
             self._info.setText("Already checking those account(s)…")
             return
@@ -498,6 +344,16 @@ class AccountCoordinator:
             card = self._card_for(sid)
             if card:
                 card.set_check_state("queued")
+
+    def refresh_stats(self, accounts) -> None:
+        """Right-click "Refresh stats" / the main-panel button: a stats-only
+        check (profile + cooldown + GCPD) — no Workshop clear, no loadout
+        write."""
+        self.check_accounts(accounts, steps=CheckSteps(loadout=False, workshop=False, stats=True))
+
+    def refresh_all_stats(self) -> None:
+        """Stats-only check for every account on the grid (sequentially)."""
+        self.refresh_stats(self.accounts_on_grid())
 
     def _card_for(self, steam_id: str):
         return next((c for c in self._grid.cards() if c.acc.get("steamid", "") == steam_id), None)

@@ -61,7 +61,7 @@ def show_account_card_menu(
     on_cs2_source_set=None,
     on_cs2_apply=None,
     on_reset_hwid=None,
-    on_cs2_rank=None,
+    on_refresh_stats=None,
     on_check=None,
     has_hwid_profile: bool = False,
 ) -> None:
@@ -103,14 +103,15 @@ def show_account_card_menu(
     menu.addSeparator()
     act_profile = menu.addAction("Open Steam Profile")
     act_profile.setEnabled(not multi and bool(steam_id))
-    act_cs2_rank = None
-    if on_cs2_rank is not None:
-        act_cs2_rank = menu.addAction(
-            f"Fetch CS2 rank ({export_count})" if multi else "Fetch CS2 rank"
+    act_refresh_stats = None
+    if on_refresh_stats is not None:
+        act_refresh_stats = menu.addAction(
+            f"Refresh stats ({export_count})" if multi else "Refresh stats"
         )
-        # Mints a web session per account and fetches ranks sequentially. Needs at
-        # least one target with a saved token (export_count counts those).
-        act_cs2_rank.setEnabled(export_count > 0)
+        # One CS2 server session per account (profile + cooldown + GCPD), run
+        # sequentially. Needs at least one target with a saved token
+        # (export_count counts those).
+        act_refresh_stats.setEnabled(export_count > 0)
 
     act_check = None
     if on_check is not None:
@@ -204,8 +205,8 @@ def show_account_card_menu(
         on_export_file(targets)
     elif chosen == act_profile and steam_id and not multi:
         webbrowser.open(f"https://steamcommunity.com/profiles/{steam_id}")
-    elif act_cs2_rank is not None and chosen == act_cs2_rank and export_count > 0:
-        on_cs2_rank(targets)
+    elif act_refresh_stats is not None and chosen == act_refresh_stats and export_count > 0:
+        on_refresh_stats(targets)
     elif act_check is not None and chosen == act_check and export_count > 0:
         on_check(targets)
     elif act_cs2_source is not None and chosen == act_cs2_source and not multi and steam_id:

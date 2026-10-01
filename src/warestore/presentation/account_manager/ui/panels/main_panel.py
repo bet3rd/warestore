@@ -243,7 +243,7 @@ class MainPanel:
         self._btn_cs2_ranks = QPushButton()
         self._btn_cs2_ranks.setObjectName("gear")
         self._btn_cs2_ranks.setFixedSize(24, 24)
-        self._btn_cs2_ranks.setToolTip("Fetch CS2 ranks for all accounts")
+        self._btn_cs2_ranks.setToolTip("Refresh CS2 stats for all accounts")
         self._btn_cs2_ranks.setIcon(_rank_bars_icon())
         self._btn_cs2_ranks.setIconSize(QSize(16, 16))
         status_layout.addWidget(self._btn_cs2_ranks)

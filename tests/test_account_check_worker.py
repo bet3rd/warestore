@@ -19,15 +19,39 @@ from warestore.presentation.account_manager.features.accounts.account_check_work
 def test_queue_drops_duplicates_and_the_running_account():
     q = AccountCheckQueue()
     assert q.add(["a", "b", "a"]) == 2
-    q.set_current(q.pop())  # "a" is running
+    q.set_current(q.pop()[0])  # "a" is running
     assert q.add(["a", "b", "c"]) == 1  # only "c" is new
-    assert [q.pop(), q.pop(), q.pop()] == ["b", "c", None]
+    assert [q.pop(), q.pop(), q.pop()] == [("b", None), ("c", None), None]
+
+
+STATS_ONLY = CheckSteps(loadout=False, workshop=False, stats=True)
+
+
+def test_queue_items_carry_their_steps():
+    q = AccountCheckQueue()
+    q.add(["a"], STATS_ONLY)
+    assert q.pop() == ("a", STATS_ONLY)
+
+
+def test_queue_upgrades_a_stats_only_item_to_full_when_reenqueued_without_steps():
+    q = AccountCheckQueue()
+    assert q.add(["a"], STATS_ONLY) == 1
+    assert q.add(["a"]) == 0  # already queued — this upgrades it, doesn't re-add it
+    assert q.pop() == ("a", None)
+
+
+def test_queue_never_downgrades_a_full_item_to_stats_only():
+    q = AccountCheckQueue()
+    assert q.add(["a"]) == 1  # full / settings-based
+    assert q.add(["a"], STATS_ONLY) == 0  # must not downgrade it
+    assert q.pop() == ("a", None)
 
 
 class FakeCtrl:
     def __init__(self):
         self.source_reads = 0
         self.checked = []
+        self.checked_steps = []
         self.source_sid = "src"
         self.loadout_on = True
 
@@ -43,6 +67,7 @@ class FakeCtrl:
 
     def check_account(self, steam_id, *, source, steps=None, deadline=None):
         self.checked.append((steam_id, source.steam_id))
+        self.checked_steps.append((steam_id, steps))
         return CheckResult(steam_id=steam_id)
 
 
@@ -116,44 +141,24 @@ def test_no_source_read_when_the_target_is_the_source():
     assert ctrl.checked == [("src", "src")]
 
 
-def test_check_and_rank_sweep_dead_lists_stay_separate():
-    """Verify that when both check and rank sweeps are in flight, dead accounts
-    from each are handled separately and not lost."""
-    from warestore.presentation.account_manager.features.accounts.coordinator import (
-        AccountCoordinator,
-    )
+# --- retiring the separate rank fetch: stats-only queue items ---------------
 
-    # Build a minimal coordinator without full init
-    coord = AccountCoordinator.__new__(AccountCoordinator)
-    coord._check_stats = {"done": 0, "pending": 0, "dead": 1, "failed": 0}
-    coord._check_dead = [{"steamid": "check_dead", "name": "Check Dead"}]
-    coord._cs2_dead = [{"steamid": "rank_dead", "name": "Rank Dead"}]
 
-    # Fake info label
-    class FakeInfo:
-        def setText(self, text):
-            self.text = text
+def test_stats_only_steps_reach_check_account():
+    ctrl = FakeCtrl()
+    worker = AccountCheckWorker(ctrl)
+    worker._queue.add(["a"], STATS_ONLY)
+    worker.run()
+    assert ctrl.checked_steps == [("a", STATS_ONLY)]
 
-    coord._info = FakeInfo()
 
-    # Record what _prompt_dead_accounts was called with
-    prompted_dead = []
-
-    def fake_prompt(dead: list[dict]):
-        prompted_dead.append(dead[:])  # copy the list
-
-    coord._prompt_dead_accounts = fake_prompt
-
-    # Drain the check queue
-    coord._on_checks_drained()
-
-    # Verify: the prompt got only the check's dead account
-    assert len(prompted_dead) == 1
-    assert prompted_dead[0] == [{"steamid": "check_dead", "name": "Check Dead"}]
-    # And the rank sweep's dead account is still in _cs2_dead
-    assert coord._cs2_dead == [{"steamid": "rank_dead", "name": "Rank Dead"}]
-    # And check_dead was cleared
-    assert coord._check_dead == []
+def test_no_source_read_for_a_stats_only_item_even_with_loadout_on():
+    ctrl = FakeCtrl()
+    worker = AccountCheckWorker(ctrl)
+    worker._queue.add(["a"], STATS_ONLY)
+    worker.run()
+    assert ctrl.source_reads == 0
+    assert ctrl.checked == [("a", "")]
 
 
 def test_check_accounts_queues_cards_and_tracks_batch_progress():
@@ -190,7 +195,7 @@ def test_check_accounts_queues_cards_and_tracks_batch_progress():
         def __init__(self):
             self.enqueued = []
 
-        def enqueue(self, steam_ids):
+        def enqueue(self, steam_ids, steps=None):
             self.enqueued.append(list(steam_ids))
             return len(steam_ids)
 
@@ -266,7 +271,7 @@ def test_check_accounts_single_account_status_has_no_counter():
             return {"token": "tok"}
 
     class FakeWorker:
-        def enqueue(self, steam_ids):
+        def enqueue(self, steam_ids, steps=None):
             return len(steam_ids)
 
     class FakeInfo:
