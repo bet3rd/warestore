@@ -107,6 +107,7 @@ class Cs2Session:
         self._client = None
         self._gc = None
         self._welcome = b""
+        self._mm_hello: bytes | None = None
         self._equip_replies: list[int] = []
         self._playing_blocked = False
         self.steamid = 0
@@ -137,6 +138,11 @@ class Cs2Session:
             self._gc = self._gc_factory(self._client)
             for emsg in gp.EQUIP_REPLY_MSGS:
                 self._gc.on(emsg, lambda _hdr, _body, _e=emsg: self._equip_replies.append(_e))
+            # Registered before games_played: 9110 (the cooldown answer) can
+            # arrive unprompted, bundled with any ClientWelcome — including
+            # this first one — so a late cooldown_seconds() call might already
+            # have it and skip the leave/re-enter cycle entirely.
+            self._gc.on(gp.MSG_MM_HELLO_REPLY, self._on_mm_hello_reply)
             self._playing_blocked = False
             self._client.on(gp.MSG_CLIENT_PLAYING_SESSION_STATE, self._on_playing_session_state)
             self._client.games_played([gp.CS2_APP_ID])
@@ -145,6 +151,9 @@ class Cs2Session:
             self._close()
             raise
         return self
+
+    def _on_mm_hello_reply(self, _hdr, body) -> None:
+        self._mm_hello = body
 
     def _on_playing_session_state(self, msg) -> None:
         """Steam (not the GC) telling us this account is playing somewhere.
@@ -226,9 +235,39 @@ class Cs2Session:
         return gp.decode_players_profile(body, self.account_id) if body is not None else None
 
     def cooldown_seconds(self) -> int | None:
-        self._send(gp.MSG_MM_HELLO, b"")
-        body = self._wait(gp.MSG_MM_HELLO_REPLY, self._budget(self.REPLY_TIMEOUT))
-        return gp.decode_account_profile(body).cooldown_seconds if body is not None else None
+        """Competitive-cooldown seconds, or None if it couldn't be learned.
+
+        Steam never answers an on-demand MSG_MM_HELLO (9109) — live probes
+        showed 9110 only ever arrives unprompted, bundled with a fresh
+        ClientWelcome, right after the account leaves and re-enters CS2
+        (games_played([]) -> brief pause -> games_played([730]) -> ClientHello
+        -> welcome + 9110 together). __enter__ already captures any 9110 that
+        shows up on its own; this only drives the leave/re-enter cycle when
+        nothing arrived yet, up to twice.
+        """
+        for _ in range(2):
+            if self._mm_hello is not None:
+                break
+            self._reenter_for_mm_hello()
+        if self._mm_hello is None:
+            return None
+        return gp.decode_account_profile(self._mm_hello).cooldown_seconds
+
+    def _reenter_for_mm_hello(self) -> None:
+        self._client.games_played([])
+        self._client.sleep(self._budget(2.5))
+        self._client.games_played([gp.CS2_APP_ID])
+        self._send(gp.MSG_CLIENT_HELLO, gp.encode_client_hello())
+        deadline = time.monotonic() + self._budget(self.REPLY_TIMEOUT)
+        welcome = self._wait(gp.MSG_CLIENT_WELCOME, max(0.0, deadline - time.monotonic()))
+        if welcome is not None:
+            self._welcome = welcome
+        if self._playing_blocked:
+            raise AccountInUseError("playing on another device")
+        while self._mm_hello is None and time.monotonic() < deadline:
+            self._client.sleep(0.2)
+        if self._playing_blocked:
+            raise AccountInUseError("playing on another device")
 
     def clear_workshop(self) -> tuple[int, int]:
         access_token = mint_access_token(self._client, self._token, self.steamid)

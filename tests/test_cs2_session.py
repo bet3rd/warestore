@@ -60,14 +60,26 @@ class PlayingElsewhereClient(FakeClient):
 
 
 class FakeGC:
-    """Scripted GC: answers hello with `welcome`; an equip rewrites it."""
+    """Scripted GC: answers hello with `welcome`; an equip rewrites it.
 
-    def __init__(self, welcome=b"", *, answers_hello=True, apply_equips=True, profile=None, mm=None):
+    ``mm_after_hello_send`` fires the registered MSG_MM_HELLO_REPLY (9110)
+    handler right after the Nth ClientHello send (1 = during the session's
+    own __enter__ hello, 2 = after one leave/re-enter cycle) — matching the
+    live-probe evidence that 9110 arrives unprompted, bundled with a fresh
+    ClientWelcome, never in response to an on-demand MSG_MM_HELLO.
+    """
+
+    def __init__(
+        self, welcome=b"", *, answers_hello=True, apply_equips=True, profile=None,
+        mm_after_hello_send=None, mm_body=b"",
+    ):
         self.welcome = welcome
         self.answers_hello = answers_hello
         self.apply_equips = apply_equips
         self.profile = profile
-        self.mm = mm
+        self.mm_after_hello_send = mm_after_hello_send
+        self.mm_body = mm_body
+        self.hello_sends = 0
         self.sent = []
         self.handlers = {}
         self.pending = {}
@@ -77,8 +89,13 @@ class FakeGC:
 
     def send(self, header, body):
         self.sent.append((header.msg, body))
-        if header.msg == gp.MSG_CLIENT_HELLO and self.answers_hello:
-            self.pending[gp.MSG_CLIENT_WELCOME] = self.welcome
+        if header.msg == gp.MSG_CLIENT_HELLO:
+            self.hello_sends += 1
+            if self.answers_hello:
+                self.pending[gp.MSG_CLIENT_WELCOME] = self.welcome
+            if self.hello_sends == self.mm_after_hello_send:
+                for fn in self.handlers.get(gp.MSG_MM_HELLO_REPLY, []):
+                    fn(None, self.mm_body)
         elif header.msg == gp.MSG_ADJUST_EQUIP_SLOTS:
             if self.apply_equips:
                 objs = []
@@ -91,8 +108,6 @@ class FakeGC:
                 fn(None, b"")
         elif header.msg == gp.MSG_PROFILE_REQUEST and self.profile is not None:
             self.pending[gp.MSG_PROFILE] = self.profile
-        elif header.msg == gp.MSG_MM_HELLO and self.mm is not None:
-            self.pending[gp.MSG_MM_HELLO_REPLY] = self.mm
 
     def wait_event(self, emsg, timeout=None):
         if emsg in self.pending:
@@ -174,15 +189,61 @@ def test_write_loadout_reports_slots_the_gc_ignored():
         assert s.write_loadout(want) == (29, 30, 1)
 
 
-def test_profile_and_cooldown():
+def test_profile_request():
     me = gp.encode_account_profile(ACCT, level=6, premier_rating=15_000, premier_wins=30)
-    mm = gp.encode_account_profile(ACCT, cooldown_seconds=600)
-    gc = FakeGC(gp.encode_welcome([]), profile=gp.encode_players_profile([me]), mm=mm)
+    gc = FakeGC(gp.encode_welcome([]), profile=gp.encode_players_profile([me]))
     s, _ = _session(gc)
     with s:
         prof = s.profile()
         assert (prof.level, prof.premier_rating) == (6, 15_000)
+
+
+# --- cooldown_seconds: the GC only answers 9110 unprompted, bundled with a --
+# --- fresh ClientWelcome after leaving and re-entering the game -------------
+
+
+def test_cooldown_already_received_during_enter_is_returned_without_cycling():
+    """9110 can arrive spontaneously during __enter__'s own hello — if it did,
+    cooldown_seconds() must use it immediately, no leave/re-enter cycle."""
+    mm = gp.encode_account_profile(ACCT, cooldown_seconds=600)
+    gc = FakeGC(gp.encode_welcome([]), mm_after_hello_send=1, mm_body=mm)
+    s, client = _session(gc)
+    with s:
+        games_before = list(client.games)
         assert s.cooldown_seconds() == 600
+        assert client.games == games_before  # no extra games_played calls
+
+
+def test_cooldown_answers_after_one_leave_and_reenter_cycle():
+    """The documented live sequence: games_played([]) -> sleep -> games_played
+    ([730]) -> ClientHello -> welcome + 9110 arrive together."""
+    mm = gp.encode_account_profile(ACCT, cooldown_seconds=600)
+    gc = FakeGC(gp.encode_welcome([]), mm_after_hello_send=2, mm_body=mm)
+    s, client = _session(gc)
+    s.REPLY_TIMEOUT = 0.05
+    with s:
+        assert s.cooldown_seconds() == 600
+        assert client.games[-2:] == [[], [gp.CS2_APP_ID]]
+
+
+def test_cooldown_returns_none_when_the_gc_never_answers_9110():
+    gc = FakeGC(gp.encode_welcome([]))  # never fires MSG_MM_HELLO_REPLY
+    s, client = _session(gc)
+    s.REPLY_TIMEOUT = 0.02
+    with s:
+        assert s.cooldown_seconds() is None
+        # tried the full two re-enter cycles before giving up
+        assert client.games.count([]) == 2
+
+
+def test_cooldown_reenter_cycle_still_detects_playing_elsewhere():
+    client = PlayingElsewhereClient()
+    gc = FakeGC(gp.encode_welcome([]))  # answers_hello=True, never sends 9110
+    s, _ = _session(gc, client=client)
+    s.REPLY_TIMEOUT = 0.05
+    with s:
+        with pytest.raises(AccountInUseError, match="playing on another device"):
+            s.cooldown_seconds()
 
 
 def test_past_deadline_raises_gc_unavailable_quickly():
