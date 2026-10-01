@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PyQt5.QtWidgets import QLineEdit, QWidget
+from PyQt5.QtWidgets import QLineEdit, QMessageBox, QWidget
 
 from warestore.application.account_manager.controller import AccountManagerController
 from warestore.application.account_manager.presenter import AccountManagerPresenter
@@ -130,9 +130,12 @@ class LoginCoordinator:
         token: str = "",
         acc: dict | None = None,
         is_add: bool = False,
+        skip_check: bool = False,
     ) -> None:
         target = acc or self._get_selected()
         opts = self._presenter.switch_worker_options(mode=mode, acc=target, token=token, is_add=is_add)
+        if skip_check:
+            opts["check_account"] = False
         label = self._presenter.switch_label(mode, target)
         self._worker = SwitchWorker(**opts, ctrl=self._ctrl)
         self._worker.status.connect(lambda msg: self._set_busy(True, msg))
@@ -142,6 +145,14 @@ class LoginCoordinator:
 
     def _on_worker_done(self, ok: bool) -> None:
         self._set_busy(False)
+        if not ok and getattr(self._worker, "token_rejected", False):
+            token = self._worker.token
+            if self._confirm_keep_rejected():
+                self.start_switch(mode="token", token=token, is_add=True, skip_check=True)
+            else:
+                self._set_status("Not added — Steam rejected this token.")
+                self._refresh_log()
+            return
         if ok:
             self._reload_accounts()
             if self._entry.text().strip():
@@ -151,3 +162,15 @@ class LoginCoordinator:
             reason = getattr(self._worker, "failure_message", "")
             self._set_status(reason or "Switch/login failed — see log.")
         self._refresh_log()
+
+    def _confirm_keep_rejected(self) -> bool:
+        box = QMessageBox(self._parent)
+        box.setWindowTitle("Token rejected")
+        box.setIcon(QMessageBox.Warning)
+        box.setText("Steam rejected this token.")
+        box.setInformativeText("Keep the account anyway? It probably can't log in.")
+        keep = box.addButton("Keep account", QMessageBox.AcceptRole)
+        skip = box.addButton("Don't add", QMessageBox.RejectRole)
+        box.setDefaultButton(skip)
+        box.exec_()
+        return box.clickedButton() is keep

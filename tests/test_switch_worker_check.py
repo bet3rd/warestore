@@ -150,3 +150,44 @@ def test_no_source_read_when_the_target_is_the_source():
     ctrl = FakeCtrl(source_sid=TARGET_SID)
     _run(ctrl)
     assert "read_source_loadout" not in ctrl.calls
+
+
+def test_a_rejected_token_is_flagged_for_the_prompt():
+    ctrl = FakeCtrl(result=CheckResult(steam_id=TARGET_SID, token_dead=True))
+    worker = SwitchWorker(mode="token", token=RAW_TOKEN, check_account=True, ctrl=ctrl)
+    worker.run()
+    assert worker.token_rejected is True
+
+
+# --- the "keep it anyway?" prompt --------------------------------------------
+
+
+def _login_coord(keep: bool):
+    from types import SimpleNamespace
+
+    from warestore.presentation.account_manager.features.login.coordinator import LoginCoordinator
+
+    coord = LoginCoordinator.__new__(LoginCoordinator)
+    coord._worker = SimpleNamespace(token_rejected=True, token=RAW_TOKEN,
+                                    failure_message="Steam rejected this token — account not added.")
+    coord.started = []
+    coord.statuses = []
+    coord._set_busy = lambda busy, msg="": None
+    coord._set_status = coord.statuses.append
+    coord._refresh_log = lambda: None
+    coord._confirm_keep_rejected = lambda: keep
+    coord.start_switch = lambda **kw: coord.started.append(kw)
+    return coord
+
+
+def test_keeping_a_rejected_token_adds_it_without_checking_again():
+    coord = _login_coord(keep=True)
+    coord._on_worker_done(False)
+    assert coord.started == [{"mode": "token", "token": RAW_TOKEN, "is_add": True, "skip_check": True}]
+
+
+def test_not_keeping_a_rejected_token_adds_nothing():
+    coord = _login_coord(keep=False)
+    coord._on_worker_done(False)
+    assert coord.started == []
+    assert "not added" in coord.statuses[-1].lower()

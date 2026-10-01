@@ -51,6 +51,9 @@ class SwitchWorker(QThread):
         # Why the run failed, when it's something the user should read (shown
         # instead of the generic "login failed").
         self.failure_message = ""
+        # Set when Steam rejected the pasted token, so the UI can ask whether to
+        # add the account anyway.
+        self.token_rejected = False
 
     def run(self):
         try:
@@ -59,6 +62,7 @@ class SwitchWorker(QThread):
                 # saved: a token Steam rejects must never be added.
                 result = self._run_account_check()
                 if result is not None and result.token_dead:
+                    self.token_rejected = True
                     self.failure_message = "Steam rejected this token — account not added."
                     logger.warning("Token rejected by Steam — account not added.")
                     self.status.emit(self.failure_message)
