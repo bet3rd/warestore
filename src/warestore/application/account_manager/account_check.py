@@ -18,6 +18,7 @@ from warestore.infrastructure.steam.cs2_session import (
     Cs2Session,
     GcUnavailableError,
 )
+from warestore.infrastructure.steam.gcpd_parser import COOLDOWN_PERMANENT
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +74,12 @@ class CheckResult:
     outcomes: dict[str, StepOutcome] = field(default_factory=dict)
     profile_ok: bool = False
     cooldown_ok: bool = False
+    gcpd_ok: bool = False
     cs2_level: int = -1
     premier_rating: int = -1
     premier_wins: int = -1
+    wingman_rank: int = -1
+    wingman_wins: int = -1
     cooldown_expires: int = 0
     workshop_removed: int = 0
     workshop_failed: int = 0
@@ -85,7 +89,7 @@ class CheckResult:
 
     @property
     def stats_ok(self) -> bool:
-        return self.profile_ok or self.cooldown_ok
+        return self.profile_ok or self.cooldown_ok or self.gcpd_ok
 
     def summary(self) -> str:
         if self.token_dead:
@@ -239,27 +243,71 @@ class AccountCheckService:
     def _stats(self, session, result: CheckResult, name: str) -> StepOutcome:
         profile = session.profile()
         cooldown = session.cooldown_seconds()
-        if profile is None and cooldown is None:
+        try:
+            gcpd = session.gcpd_rank()
+        except Exception as exc:  # noqa: BLE001 - GCPD is best-effort; GC data must still save
+            logger.info("account-check: %s — GCPD scrape failed: %s", name, type(exc).__name__)
+            gcpd = None
+
+        if profile is None and cooldown is None and gcpd is None:
             return StepOutcome("failed", "no reply")
+
         missing: list[str] = []
+
         if profile is not None:
             result.cs2_level = profile.level
-            result.premier_rating = profile.premier_rating
-            result.premier_wins = profile.premier_wins
             result.profile_ok = True
             level_txt = str(profile.level) if profile.level >= 0 else "unknown"
-            premier_txt = str(profile.premier_rating) if profile.premier_rating >= 0 else "unranked"
         else:
-            level_txt = premier_txt = "unknown"
+            level_txt = "unknown"
             missing.append("profile didn't answer")
+
+        if gcpd is not None:
+            result.wingman_rank = gcpd.wingman_rank
+            result.wingman_wins = gcpd.wingman_wins
+            result.gcpd_ok = True
+        else:
+            missing.append("GCPD didn't answer")
+
+        if profile is not None or gcpd is not None:
+            gc_rating = profile.premier_rating if profile is not None else -1
+            gc_wins = profile.premier_wins if profile is not None else -1
+            gcpd_rating = gcpd.premier_rating if gcpd is not None else -1
+            gcpd_wins = gcpd.premier_wins if gcpd is not None else -1
+            result.premier_rating = gc_rating if gc_rating > 0 else (
+                gcpd_rating if gcpd_rating > 0 else -1
+            )
+            result.premier_wins = gcpd_wins if gcpd_wins >= 0 else gc_wins
+        premier_txt = f"{result.premier_rating:,}" if result.premier_rating > 0 else "unranked"
+        if result.premier_rating > 0 and result.premier_wins >= 0:
+            premier_txt += f" ({result.premier_wins} wins)"
+
+        wingman_txt = "unknown" if gcpd is None else (
+            str(result.wingman_rank) if result.wingman_rank > 0 else "unranked"
+        )
+
         if cooldown is not None:
             result.cooldown_expires = int(self._wall_clock()) + cooldown if cooldown > 0 else 0
             result.cooldown_ok = True
             cooldown_txt = "no cooldown" if cooldown <= 0 else f"cooldown {_format_hm(cooldown)} left"
+        elif gcpd is not None:
+            result.cooldown_expires = gcpd.cooldown_expires_unix
+            result.cooldown_ok = True
+            if gcpd.cooldown_expires_unix <= 0:
+                cooldown_txt = "no cooldown"
+            elif gcpd.cooldown_expires_unix >= COOLDOWN_PERMANENT:
+                cooldown_txt = "cooldown permanent"
+            else:
+                remaining = max(0, gcpd.cooldown_expires_unix - int(self._wall_clock()))
+                cooldown_txt = f"cooldown {_format_hm(remaining)} left"
         else:
             cooldown_txt = "unknown"
             missing.append("cooldown didn't answer")
-        line = f"account-check: {name} — stats: CS2 level {level_txt}, Premier {premier_txt}, {cooldown_txt}"
+
+        line = (
+            f"account-check: {name} — stats: CS2 level {level_txt}, "
+            f"Premier {premier_txt}, Wingman {wingman_txt}, {cooldown_txt}"
+        )
         if missing:
             line += " (" + ", ".join(missing) + ")"
         logger.info(line)
@@ -293,11 +341,13 @@ class AccountCheckService:
     def _save(self, result: CheckResult) -> None:
         kw: dict = {"summary": result.summary(), "now": int(self._wall_clock())}
         if result.profile_ok:
-            kw.update(
-                cs2_level=result.cs2_level,
-                premier_rating=result.premier_rating,
-                premier_wins=result.premier_wins,
-            )
+            kw["cs2_level"] = result.cs2_level
+        if result.profile_ok or result.gcpd_ok:
+            kw["premier_rating"] = result.premier_rating
+            kw["premier_wins"] = result.premier_wins
+        if result.gcpd_ok:
+            kw["wingman_rank"] = result.wingman_rank
+            kw["wingman_wins"] = result.wingman_wins
         if result.cooldown_ok:
             kw["cooldown_expires"] = result.cooldown_expires
         self._metadata.set_account_check(result.steam_id, **kw)

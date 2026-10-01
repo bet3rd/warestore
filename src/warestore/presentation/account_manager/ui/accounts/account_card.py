@@ -391,6 +391,26 @@ class AccountCard(QWidget):
         self.set_cs2_rank(self._premier_rating, self._wingman_rank, cooldown_expires,
                           self._premier_wins, self._wingman_wins)
 
+    def set_check_update(
+        self,
+        *,
+        premier_rating: int | None = None,
+        premier_wins: int | None = None,
+        wingman_rank: int | None = None,
+        wingman_wins: int | None = None,
+        cooldown_expires: int | None = None,
+    ) -> None:
+        """Account-check update: apply whichever of these five values arrived
+        this check (``None`` = that step didn't answer), keeping the card's
+        current value for everything else."""
+        self.set_cs2_rank(
+            premier_rating if premier_rating is not None else self._premier_rating,
+            wingman_rank if wingman_rank is not None else self._wingman_rank,
+            cooldown_expires if cooldown_expires is not None else self._cs2_cooldown_expires,
+            premier_wins if premier_wins is not None else self._premier_wins,
+            wingman_wins if wingman_wins is not None else self._wingman_wins,
+        )
+
     def set_checking(self, checking: bool) -> None:
         """Thin wrapper over set_check_state for existing callers/tests."""
         self.set_check_state("checking" if checking else "idle")

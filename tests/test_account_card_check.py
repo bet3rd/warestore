@@ -72,6 +72,25 @@ def test_set_cs2_cooldown_leaves_premier_untouched(_app):
     assert card._wingman_rank == 5 and card._wingman_wins == 2
 
 
+def test_set_check_update_only_applies_values_that_arrived(_app):
+    card = _card()
+    card.set_cs2_rank(15_000, 5, 1_234, 30, 2)
+    # Only Wingman arrived this check — Premier and cooldown stay as they were.
+    card.set_check_update(wingman_rank=7, wingman_wins=9)
+    assert card._wingman_rank == 7 and card._wingman_wins == 9
+    assert card._premier_rating == 15_000 and card._premier_wins == 30
+    assert card._cs2_cooldown_expires == 1_234
+
+
+def test_set_check_update_with_nothing_arrived_is_a_no_op(_app):
+    card = _card()
+    card.set_cs2_rank(15_000, 5, 1_234, 30, 2)
+    card.set_check_update()
+    assert (card._premier_rating, card._premier_wins) == (15_000, 30)
+    assert (card._wingman_rank, card._wingman_wins) == (5, 2)
+    assert card._cs2_cooldown_expires == 1_234
+
+
 def test_check_state_checking_starts_and_stops_the_spinner(_app):
     card = _card()
     card.set_check_state("checking")

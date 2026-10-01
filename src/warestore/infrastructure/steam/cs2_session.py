@@ -12,7 +12,9 @@ exit. MUST run off the Qt thread (ValvePython/gevent).
 from __future__ import annotations
 
 import logging
+import secrets
 import time
+from urllib.parse import quote
 
 from warestore.infrastructure.steam import cs2_gc_proto as gp
 from warestore.infrastructure.steam.cs2_cm_mint import (
@@ -22,8 +24,14 @@ from warestore.infrastructure.steam.cs2_cm_mint import (
     open_cm_client,
 )
 from warestore.infrastructure.steam.cs2_workshop_web import WorkshopWebClient
+from warestore.infrastructure.steam.gcpd_parser import Cs2Rank
+from warestore.infrastructure.steam.gcpd_scrape_gateway import Cs2RankScrapeGateway
 
 logger = logging.getLogger(__name__)
+
+# Sentinel: the web access token hasn't been minted yet this session (as
+# opposed to a mint that was tried and failed, which caches None).
+_UNSET = object()
 
 
 class AccountInUseError(Exception):
@@ -95,6 +103,7 @@ class Cs2Session:
         gc_factory=None,
         in_use_probe=account_in_use,
         workshop_factory=WorkshopWebClient,
+        gcpd_factory=Cs2RankScrapeGateway,
         deadline: float | None = None,
     ) -> None:
         self._token = _clean_token(refresh_token)
@@ -103,6 +112,7 @@ class Cs2Session:
         self._gc_factory = gc_factory or _default_gc_factory
         self._in_use_probe = in_use_probe
         self._workshop_factory = workshop_factory
+        self._gcpd_factory = gcpd_factory
         self._deadline = deadline
         self._client = None
         self._gc = None
@@ -110,6 +120,7 @@ class Cs2Session:
         self._mm_hello: bytes | None = None
         self._equip_replies: list[int] = []
         self._playing_blocked = False
+        self._access_token_cache = _UNSET
         self.steamid = 0
         self.account_id = 0
 
@@ -269,8 +280,37 @@ class Cs2Session:
         if self._playing_blocked:
             raise AccountInUseError("playing on another device")
 
+    def _access_token(self) -> str | None:
+        """The web access token for this session, minted at most once.
+
+        Workshop clearing and the GCPD scrape both need a web session for the
+        same account, so the mint (an extra UM round-trip to the CM) happens
+        at most once per session and the result — success or failure — is
+        reused by whichever of them runs.
+        """
+        if self._access_token_cache is _UNSET:
+            self._access_token_cache = mint_access_token(self._client, self._token, self.steamid)
+        return self._access_token_cache
+
     def clear_workshop(self) -> tuple[int, int]:
-        access_token = mint_access_token(self._client, self._token, self.steamid)
+        access_token = self._access_token()
         if not access_token:
             raise ConnectionError("could not mint a web session for Workshop")
         return self._workshop_factory(self.steamid, access_token).clear_all()
+
+    def gcpd_rank(self) -> Cs2Rank | None:
+        """Premier/Wingman rank + competitive cooldown, scraped from GCPD.
+
+        Reuses the same minted web access token as ``clear_workshop`` (no
+        extra CM logon). Returns None on any failure — this is best-effort:
+        the GC's own profile()/cooldown_seconds() data must still save even
+        when GCPD can't be reached.
+        """
+        access_token = self._access_token()
+        if not access_token:
+            return None
+        cookies = {
+            "steamLoginSecure": quote(f"{self.steamid}||{access_token}", safe=""),
+            "sessionid": secrets.token_hex(12),
+        }
+        return self._gcpd_factory().fetch_with_cookies(self.steamid, cookies)

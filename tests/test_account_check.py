@@ -10,6 +10,7 @@ from warestore.application.account_manager.account_check import (
 from warestore.infrastructure.steam import cs2_gc_proto as gp
 from warestore.infrastructure.steam.cs2_cm_mint import TokenRejectedError
 from warestore.infrastructure.steam.cs2_session import AccountInUseError, GcUnavailableError
+from warestore.infrastructure.steam.gcpd_parser import COOLDOWN_PERMANENT, Cs2Rank
 
 TARGET = "76561198000000002"
 SOURCE = "76561198000000001"
@@ -54,6 +55,9 @@ class FakeSession:
     def cooldown_seconds(self):
         return self._step("cooldown_seconds", 0)
 
+    def gcpd_rank(self):
+        return self._step("gcpd_rank", None)
+
     def clear_workshop(self):
         return self._step("clear_workshop", (3, 0))
 
@@ -87,7 +91,9 @@ def _source():
 def test_all_steps_run_in_order_and_are_saved(svc):
     service, meta = svc
     result = service.check(TARGET, CheckSteps(), _source())
-    assert FakeSession.last.calls == ["profile", "cooldown_seconds", "clear_workshop", "write_loadout"]
+    assert FakeSession.last.calls == [
+        "profile", "cooldown_seconds", "gcpd_rank", "clear_workshop", "write_loadout",
+    ]
     assert {k: o.status for k, o in result.outcomes.items()} == {"stats": "ok", "workshop": "ok", "loadout": "ok"}
     sid, kw = meta.calls[-1]
     assert sid == TARGET and kw["cs2_level"] == 6 and kw["premier_rating"] == 15_000
@@ -105,7 +111,7 @@ def test_a_failing_step_does_not_stop_the_rest(svc):
 def test_disabled_steps_are_not_run(svc):
     service, _ = svc
     service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
-    assert FakeSession.last.calls == ["profile", "cooldown_seconds"]
+    assert FakeSession.last.calls == ["profile", "cooldown_seconds", "gcpd_rank"]
 
 
 def test_loadout_skipped_for_the_source_itself_and_without_source(svc):
@@ -247,3 +253,84 @@ def test_logs_are_readable_and_never_leak_the_token(svc, caplog):
     assert "loadout:" in text
     assert f"done: {result.summary()}" in text
     assert token not in text
+
+
+# --- GCPD folded into the stats step: merge rules ----------------------------
+
+
+def test_premier_prefers_gc_rating_over_gcpd_when_gc_answers(svc):
+    service, meta = svc
+    FakeSession.script = {
+        "gcpd_rank": Cs2Rank(premier_rating=9_000, premier_wins=5, wingman_rank=3, wingman_wins=2),
+    }
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.outcomes["stats"].status == "ok"
+    assert result.premier_rating == 15_000  # GC profile's 15_000, not GCPD's 9_000
+    assert result.premier_wins == 5  # GCPD wins preferred whenever GCPD answered
+    assert result.wingman_rank == 3 and result.wingman_wins == 2
+    sid, kw = meta.calls[-1]
+    assert kw["premier_rating"] == 15_000 and kw["premier_wins"] == 5
+    assert kw["wingman_rank"] == 3 and kw["wingman_wins"] == 2
+
+
+def test_premier_falls_back_to_gcpd_when_gc_profile_is_unranked(svc):
+    service, meta = svc
+    FakeSession.script = {
+        "profile": gp.GcProfile(level=6, premier_rating=-1, premier_wins=-1),
+        "gcpd_rank": Cs2Rank(premier_rating=9_000, premier_wins=5, wingman_rank=-1, wingman_wins=-1),
+    }
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.premier_rating == 9_000
+    assert result.premier_wins == 5
+    sid, kw = meta.calls[-1]
+    assert kw["premier_rating"] == 9_000 and kw["premier_wins"] == 5
+
+
+def test_gcpd_only_still_saves_premier_even_though_gc_profile_never_answered(svc):
+    service, meta = svc
+    FakeSession.script = {
+        "profile": None,
+        "cooldown_seconds": None,
+        "gcpd_rank": Cs2Rank(premier_rating=9_000, premier_wins=5, wingman_rank=4, wingman_wins=1),
+    }
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.outcomes["stats"].status == "ok"
+    assert not result.profile_ok and result.gcpd_ok
+    sid, kw = meta.calls[-1]
+    assert "cs2_level" not in kw
+    assert kw["premier_rating"] == 9_000 and kw["premier_wins"] == 5
+    assert kw["wingman_rank"] == 4 and kw["wingman_wins"] == 1
+
+
+def test_cooldown_falls_back_to_gcpd_permanent_cooldown_when_gc_silent(svc):
+    service, meta = svc
+    FakeSession.script = {
+        "cooldown_seconds": None,
+        "gcpd_rank": Cs2Rank(cooldown_expires_unix=COOLDOWN_PERMANENT, cooldown_reason="Competitive cooldown"),
+    }
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.cooldown_ok and result.cooldown_expires == COOLDOWN_PERMANENT
+    sid, kw = meta.calls[-1]
+    assert kw["cooldown_expires"] == COOLDOWN_PERMANENT
+
+
+def test_gcpd_failure_does_not_fail_stats_when_gc_answered(svc):
+    service, meta = svc
+    FakeSession.script = {"gcpd_rank": ConnectionError("boom")}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.outcomes["stats"].status == "ok"
+    assert result.profile_ok and not result.gcpd_ok
+    sid, kw = meta.calls[-1]
+    assert "wingman_rank" not in kw and "wingman_wins" not in kw
+    assert kw["premier_rating"] == 15_000  # GC data still saved despite the GCPD exception
+
+
+def test_stats_log_line_includes_wingman(svc, caplog):
+    service, _ = svc
+    caplog.set_level(logging.INFO)
+    FakeSession.script = {
+        "gcpd_rank": Cs2Rank(premier_rating=-1, premier_wins=41, wingman_rank=5, wingman_wins=12),
+    }
+    service.check(TARGET, CheckSteps(), _source())
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "Wingman 5" in text

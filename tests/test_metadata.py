@@ -110,6 +110,17 @@ def test_account_check_roundtrip(tmp_path):
     assert rec.check_pending is False
 
 
+def test_account_check_saves_wingman(tmp_path):
+    from warestore.infrastructure.persistence.metadata_repository import AccountMetadataRepository
+
+    repo = AccountMetadataRepository(str(tmp_path / "meta.json"))
+    repo.set_account_check(
+        "1", summary="ok", wingman_rank=5, wingman_wins=12, now=100,
+    )
+    rec = repo.get("1")
+    assert rec.wingman_rank == 5 and rec.wingman_wins == 12
+
+
 def test_pending_check_keeps_previous_results(tmp_path):
     from warestore.infrastructure.persistence.metadata_repository import AccountMetadataRepository
 

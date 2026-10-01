@@ -23,9 +23,7 @@ import base64
 import hashlib
 import json
 import logging
-import secrets
 import time
-import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -184,38 +182,3 @@ def mint_access_token(client, token: str, steamid: int) -> str | None:
         logger.error("cs2-mint: CM returned a rotated refresh token — aborting to be safe")
         return None
     return getattr(um.body, "access_token", "") or None
-
-
-def mint_web_cookies(refresh_token: str) -> dict | None:
-    """Return ``{"steamLoginSecure": ..., "sessionid": ...}`` or None on failure.
-
-    Non-destructive: the refresh token is used only for a CM logon and to mint an
-    access token with renewal disabled; it is never rotated.
-    """
-    try:
-        client, steamid, token = open_cm_client(refresh_token)
-    except TokenRejectedError:
-        raise
-    except CmLogonError as exc:
-        logger.warning("cs2-mint: %s", exc)
-        return None
-    except Exception as e:  # noqa: BLE001 - dependency missing / import error
-        logger.warning("cs2-mint: ValvePython 'steam' unavailable: %s", e)
-        return None
-    try:
-        access_token = mint_access_token(client, token, steamid)
-        if not access_token:
-            return None
-        logger.info("cs2-mint: web cookie minted for %s (non-destructive)", steamid)
-        return {
-            "steamLoginSecure": urllib.parse.quote(f"{steamid}||{access_token}", safe=""),
-            "sessionid": secrets.token_hex(12),
-        }
-    except Exception:  # noqa: BLE001 - never propagate into the worker
-        logger.exception("cs2-mint: unexpected error during mint")
-        return None
-    finally:
-        try:
-            client.disconnect()
-        except Exception:  # noqa: BLE001
-            pass

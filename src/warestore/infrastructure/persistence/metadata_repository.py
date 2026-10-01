@@ -111,6 +111,8 @@ class AccountMetadataRepository:
         cs2_level: int | None = None,
         premier_rating: int | None = None,
         premier_wins: int | None = None,
+        wingman_rank: int | None = None,
+        wingman_wins: int | None = None,
         cooldown_expires: int | None = None,
         now: int | None = None,
     ) -> None:
@@ -129,6 +131,10 @@ class AccountMetadataRepository:
                     record.premier_rating = int(premier_rating)
                 if premier_wins is not None:
                     record.premier_wins = int(premier_wins)
+                if wingman_rank is not None:
+                    record.wingman_rank = int(wingman_rank)
+                if wingman_wins is not None:
+                    record.wingman_wins = int(wingman_wins)
                 if cooldown_expires is not None:
                     record.cs2_cooldown_expires = int(cooldown_expires)
             data[steam_id] = record.to_dict()

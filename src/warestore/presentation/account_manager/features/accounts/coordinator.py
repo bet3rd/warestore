@@ -532,14 +532,25 @@ class AccountCoordinator:
             self._check_stats["done"] += 1
             if card:
                 # A partial stats reply (e.g. the cooldown step timed out) must
-                # never overwrite the other, still-good saved value — update
-                # Premier and the cooldown independently of each other.
-                if result.profile_ok:
-                    card.set_premier(result.premier_rating, result.premier_wins)
+                # never overwrite another, still-good saved value — Premier,
+                # Wingman, and the cooldown are each updated independently,
+                # only when that step actually answered this check.
+                premier_arrived = result.profile_ok or result.gcpd_ok
+                if premier_arrived or result.gcpd_ok or result.cooldown_ok:
+                    card.set_check_update(
+                        premier_rating=result.premier_rating if premier_arrived else None,
+                        premier_wins=result.premier_wins if premier_arrived else None,
+                        wingman_rank=result.wingman_rank if result.gcpd_ok else None,
+                        wingman_wins=result.wingman_wins if result.gcpd_ok else None,
+                        cooldown_expires=result.cooldown_expires if result.cooldown_ok else None,
+                    )
+                if premier_arrived:
                     card.acc["premier_rating"] = result.premier_rating
                     card.acc["premier_wins"] = result.premier_wins
+                if result.gcpd_ok:
+                    card.acc["wingman_rank"] = result.wingman_rank
+                    card.acc["wingman_wins"] = result.wingman_wins
                 if result.cooldown_ok:
-                    card.set_cs2_cooldown(result.cooldown_expires)
                     card.acc["cs2_cooldown_expires"] = result.cooldown_expires
         if result is not None:
             self._info.setText(f"{name}: {result.summary()}")

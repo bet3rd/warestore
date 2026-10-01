@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 bet3rd
 
-"""On-demand CS2 rank/cooldown scrape via an in-process CM-logon cookie mint.
+"""Read-only CS2 Premier/Wingman rank + competitive cooldown via a GCPD scrape.
 
-SAFE PATH ONLY. The ``steamLoginSecure`` cookie is minted in-process by a **CM
-logon** (ValvePython/steam, see :mod:`cs2_cm_mint`) — the same non-destructive
-logon the desktop client does — then this gateway does a **read-only** GCPD GET
-and parses it. It NEVER calls ``finalizelogin`` or requests a token renewal (the
-endpoints/flags that rotate/kill refresh tokens). No Node, no external service.
+The caller supplies an already-minted ``steamLoginSecure``/``sessionid`` cookie
+pair (see ``Cs2Session._access_token``/``gcpd_rank`` — the cookie rides the
+same CM-logon web access token the account check already minted for Workshop,
+so this never logs on again on its own). This gateway only does the read-only
+GCPD GET and parses it — it never touches a token or calls any auth endpoint.
 
 Every step logs at INFO so the dev console shows exactly what happened.
 """
@@ -18,7 +18,6 @@ import logging
 import urllib.error
 import urllib.request
 
-from warestore.infrastructure.steam.cs2_cm_mint import mint_web_cookies
 from warestore.infrastructure.steam.gcpd_parser import (
     Cs2Rank,
     looks_like_gcpd_page,
@@ -33,11 +32,8 @@ class Cs2RankScrapeGateway:
     def __init__(self, timeout: int = 20) -> None:
         self._timeout = timeout
 
-    def fetch(self, steam_id64: int, refresh_token: str) -> Cs2Rank | None:
-        if not steam_id64 or not refresh_token:
-            return None
-        cookies = self._mint_cookies(refresh_token)
-        if cookies is None:
+    def fetch_with_cookies(self, steam_id64: int, cookies: dict) -> Cs2Rank | None:
+        if not steam_id64 or not cookies.get("steamLoginSecure"):
             return None
         html = self._scrape(steam_id64, cookies)
         if html is None:
@@ -48,18 +44,6 @@ class Cs2RankScrapeGateway:
             steam_id64, rank.premier_rating, rank.wingman_rank, rank.cooldown_expires_unix,
         )
         return rank
-
-    def _mint_cookies(self, refresh_token: str) -> dict | None:
-        logger.info("cs2-rank: minting web cookie via in-process CM logon")
-        cookies = mint_web_cookies(refresh_token)
-        if not cookies or not cookies.get("steamLoginSecure"):
-            logger.warning("cs2-rank: CM cookie mint failed (see cs2-mint logs above)")
-            return None
-        logger.info(
-            "cs2-rank: CM logon OK — cookie minted (%d chars)",
-            len(cookies["steamLoginSecure"]),
-        )
-        return cookies
 
     def _scrape(self, steam_id64: int, cookies: dict) -> str | None:
         url = (

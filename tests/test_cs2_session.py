@@ -1,6 +1,7 @@
 import base64
 import json
 import time
+from urllib.parse import quote
 
 import pytest
 
@@ -196,6 +197,57 @@ def test_profile_request():
     with s:
         prof = s.profile()
         assert (prof.level, prof.premier_rating) == (6, 15_000)
+
+
+# --- web access token sharing (Workshop clear + GCPD scrape) ----------------
+
+
+class FakeWorkshop:
+    def __init__(self, steamid, token):
+        self.steamid = steamid
+        self.token = token
+
+    def clear_all(self):
+        return (1, 0)
+
+
+class FakeGcpdGateway:
+    seen: tuple | None = None
+
+    def fetch_with_cookies(self, steam_id64, cookies):
+        FakeGcpdGateway.seen = (steam_id64, cookies)
+        return "rank-sentinel"
+
+
+def test_access_token_is_minted_once_and_shared_with_gcpd(monkeypatch):
+    calls = []
+
+    def fake_mint(client, token, steamid):
+        calls.append(steamid)
+        return "web-token"
+
+    monkeypatch.setattr(cs2_session, "mint_access_token", fake_mint)
+    FakeGcpdGateway.seen = None
+    gc = FakeGC(gp.encode_welcome([]))
+    s, _ = _session(gc)
+    s._workshop_factory = FakeWorkshop
+    s._gcpd_factory = FakeGcpdGateway
+    with s:
+        assert s.clear_workshop() == (1, 0)
+        assert s.gcpd_rank() == "rank-sentinel"
+    assert calls == [SID]  # minted exactly once, reused for gcpd
+    steam_id64, cookies = FakeGcpdGateway.seen
+    assert steam_id64 == SID
+    assert cookies["steamLoginSecure"] == quote(f"{SID}||web-token", safe="")
+    assert "sessionid" in cookies
+
+
+def test_gcpd_rank_returns_none_when_the_access_token_mint_fails(monkeypatch):
+    monkeypatch.setattr(cs2_session, "mint_access_token", lambda client, token, steamid: None)
+    gc = FakeGC(gp.encode_welcome([]))
+    s, _ = _session(gc)
+    with s:
+        assert s.gcpd_rank() is None
 
 
 # --- cooldown_seconds: the GC only answers 9110 unprompted, bundled with a --
