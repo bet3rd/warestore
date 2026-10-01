@@ -87,6 +87,15 @@ uv run warestore
 
 Build the installer with `scripts\build.bat` (requires Inno Setup 6). See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full developer guide and project layout.
 
+## Credits
+
+| Credit | For |
+| --- | --- |
+| Killa ([@KillaBoi](https://github.com/KillaBoi)) | Guidance with the CS2 Game Coordinator. |
+| [nfatool](https://github.com/fakearchie/nfatool) by fakearchie | The approach behind the account check: copying CS2 loadouts, reading stats, and clearing Workshop subscriptions through the Game Coordinator. |
+| [CSGO-API](https://github.com/ByMykel/CSGO-API) by ByMykel | Names and images for the CS2 medals in the account tooltip. |
+| [DiceBear](https://www.dicebear.com/) | The demo avatars in the screenshot. |
+
 ## License
 
 WareStore Account Manager is licensed under the **[GPL-3.0-or-later](LICENSE)** — use it, study it, share it, modify it; distributed forks stay open under the same license. Contributions welcome.
