@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PyQt5.QtWidgets import QLineEdit, QMessageBox, QWidget
+from PyQt5.QtWidgets import QLineEdit, QWidget
 
 from warestore.application.account_manager.controller import AccountManagerController
 from warestore.application.account_manager.presenter import AccountManagerPresenter
@@ -164,13 +164,10 @@ class LoginCoordinator:
         self._refresh_log()
 
     def _confirm_keep_rejected(self) -> bool:
-        box = QMessageBox(self._parent)
-        box.setWindowTitle("Token rejected")
-        box.setIcon(QMessageBox.Warning)
-        box.setText("Steam rejected this token.")
-        box.setInformativeText("Keep the account anyway? It probably can't log in.")
-        keep = box.addButton("Keep account", QMessageBox.AcceptRole)
-        skip = box.addButton("Don't add", QMessageBox.RejectRole)
-        box.setDefaultButton(skip)
-        box.exec_()
-        return box.clickedButton() is keep
+        from warestore.presentation.account_manager.ui.dialogs import RejectedTokenDialog
+
+        dialog = RejectedTokenDialog(
+            self._parent,
+            exclude_from_capture=bool(self._ctrl.load_settings().get("exclude_from_capture", True)),
+        )
+        return dialog.exec_() == RejectedTokenDialog.Accepted

@@ -4,7 +4,8 @@
 import os
 import sys
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QRectF, Qt
+from PyQt5.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen
 from PyQt5.QtWidgets import (
     QAbstractScrollArea,
     QButtonGroup,
@@ -359,5 +360,80 @@ class DeadAccountsDialog(QDialog):
 
     def showEvent(self, event):
         enable_dark_title_bar(int(self.winId()))
+        schedule_capture_exclusion_for_widget(self, enabled=self._exclude_from_capture)
+        super().showEvent(event)
+
+
+class RejectedTokenDialog(QDialog):
+    """Steam rejected a pasted token: keep the account anyway, or don't add it.
+
+    Frameless, drawn like the main window's rounded panel. "Don't add" is the
+    filled default (Enter/Esc); "Keep account" is outline-only. ``exec_()``
+    returns Accepted for keep."""
+
+    RADIUS = 12.0
+    BG = QColor("#141414")
+    BORDER = QColor("#282828")
+
+    def __init__(self, parent, *, exclude_from_capture: bool = True):
+        super().__init__(parent)
+        self._exclude_from_capture = exclude_from_capture
+        self.setObjectName("warestore_dialog")
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedWidth(360)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 20)
+        layout.setSpacing(10)
+
+        title = QLabel("Steam rejected this token")
+        title.setObjectName("dialog_title")
+        layout.addWidget(title)
+
+        msg = QLabel("Keep the account anyway? It probably can't log in.")
+        msg.setObjectName("info")
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+        layout.addSpacing(6)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        btn_row.addStretch()
+        self.btn_keep = QPushButton("Keep account")
+        self.btn_keep.setAutoDefault(False)
+        self.btn_keep.setStyleSheet(
+            "QPushButton { background: transparent; color: #b0b0b0; font-weight: normal;"
+            " border: 1px solid #3a3a3a; border-radius: 6px; min-height: 0;"
+            " padding: 6px 16px; font-size: 12px; }"
+            "QPushButton:hover { border-color: #5a5a5a; color: #e0e0e0; }"
+            "QPushButton:pressed { background: #1a1a1a; }"
+        )
+        self.btn_skip = QPushButton("Don't add")
+        self.btn_skip.setDefault(True)
+        self.btn_skip.setStyleSheet("min-height: 0; padding: 6px 16px; font-size: 12px;")
+        for btn in (self.btn_keep, self.btn_skip):
+            btn.setMinimumSize(108, 34)
+            btn_row.addWidget(btn)
+        self.btn_keep.clicked.connect(self.accept)
+        self.btn_skip.clicked.connect(self.reject)
+        layout.addLayout(btn_row)
+
+        self.adjustSize()
+        self.setFixedSize(self.size())
+        self.setWindowModality(Qt.WindowModal)
+
+    def paintEvent(self, _event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(0.5, 0.5, self.width() - 1, self.height() - 1)
+        path = QPainterPath()
+        path.addRoundedRect(rect, self.RADIUS, self.RADIUS)
+        painter.fillPath(path, QBrush(self.BG))
+        painter.setPen(QPen(self.BORDER, 1.0))
+        painter.drawPath(path)
+        painter.end()
+
+    def showEvent(self, event):
         schedule_capture_exclusion_for_widget(self, enabled=self._exclude_from_capture)
         super().showEvent(event)
