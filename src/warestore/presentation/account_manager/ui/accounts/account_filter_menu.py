@@ -3,6 +3,7 @@
 
 from PyQt5.QtWidgets import QMenu
 
+from warestore.domain.accounts.cs2_tier import TIER_LABELS
 from warestore.presentation.account_manager.ui.accounts.account_card_menu import (
     COLOR_CHOICES,
 )
@@ -25,7 +26,7 @@ def show_account_filter_menu(*, parent, global_pos, state: dict, on_change) -> N
     """Show the accounts filter popup.
 
     `state` is a live dict {"colors": set[str], "no_cooldown": bool,
-    "no_bans": bool} that this menu mutates in place; `on_change(state)` is
+    "no_bans": bool, "tiers": set[str]} that this menu mutates in place; `on_change(state)` is
     invoked after every toggle so the grid can re-filter immediately.
     """
     menu = _StayOpenMenu(parent)
@@ -34,7 +35,9 @@ def show_account_filter_menu(*, parent, global_pos, state: dict, on_change) -> N
     menu.addSeparator()
 
     def _any_active() -> bool:
-        return bool(state["colors"] or state["no_cooldown"] or state["no_bans"])
+        return bool(
+            state["colors"] or state["no_cooldown"] or state["no_bans"] or state["tiers"]
+        )
 
     def _changed() -> None:
         # Keep the Clear item in sync without waiting for the menu to reopen.
@@ -79,12 +82,29 @@ def show_account_filter_menu(*, parent, global_pos, state: dict, on_change) -> N
     act_bans.toggled.connect(_toggle_bans)
 
     menu.addSeparator()
+
+    for tier, label in TIER_LABELS.items():
+        act = menu.addAction(label)
+        act.setCheckable(True)
+        act.setChecked(tier in state["tiers"])
+
+        def _toggle_tier(checked, t=tier):
+            if checked:
+                state["tiers"].add(t)
+            else:
+                state["tiers"].discard(t)
+            _changed()
+
+        act.toggled.connect(_toggle_tier)
+
+    menu.addSeparator()
     act_clear = menu.addAction("Clear filters")
 
     def _clear():
         state["colors"].clear()
         state["no_cooldown"] = False
         state["no_bans"] = False
+        state["tiers"].clear()
         _changed()
 
     act_clear.triggered.connect(_clear)

@@ -79,3 +79,20 @@ def test_clear_via_empty_filters(_app):
     g.set_filters(colors=set(), no_cooldown=False, no_bans=False)
     assert g.has_active_filters() is False
     assert g._card_matches(_card(color=BLUE, cooldown=True, banned=True)) is True
+
+
+def _tier_card(tier):
+    return SimpleNamespace(
+        acc={"account_name": "a", "persona_name": ""},
+        color_tag="", is_on_cooldown=False, is_banned=False, cs2_tier=tier,
+    )
+
+
+def test_tier_filter(_app):
+    g = AccountGrid()
+    g.set_filters(colors=set(), no_cooldown=False, no_bans=False, tiers={"prime", "premier_ready"})
+    assert g.has_active_filters() is True
+    assert g._card_matches(_tier_card("prime")) is True
+    assert g._card_matches(_tier_card("premier_ready")) is True
+    assert g._card_matches(_tier_card("non_prime")) is False
+    assert g._card_matches(_tier_card("unknown")) is False

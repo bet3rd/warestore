@@ -35,3 +35,4 @@ class AccountCardViewState:
     last_check: int = 0
     last_check_summary: str = ""
     check_pending: bool = False
+    prime: int = -1

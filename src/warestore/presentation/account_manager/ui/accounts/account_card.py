@@ -40,6 +40,7 @@ from warestore.domain.accounts.cooldown import (
     format_cooldown_remaining,
     format_cooldown_short,
 )
+from warestore.domain.accounts.cs2_tier import TIER_LABELS, cs2_tier
 from warestore.domain.accounts.friend_code import friend_code_for_steamid
 from warestore.domain.auth.formatters import JWT_NO_TOKEN, format_jwt_expiry_label
 from warestore.presentation.account_manager.ui.theme import accent
@@ -221,6 +222,7 @@ class AccountCard(QWidget):
         self._wingman_wins: int = -1
         self._cs2_cooldown_expires: int = 0
         self._cs2_level: int = -1
+        self._prime: int = -1
         self._last_check: int = 0
         self._check_pending: bool = False
         self._check_state: str = "idle"
@@ -321,6 +323,10 @@ class AccountCard(QWidget):
     @property
     def is_banned(self) -> bool:
         return self._ban_color() is not None
+
+    @property
+    def cs2_tier(self) -> str:
+        return cs2_tier(prime=self._prime, level=self._cs2_level, premier_rating=self._premier_rating)
 
     @property
     def is_cs2_source(self) -> bool:
@@ -572,6 +578,9 @@ class AccountCard(QWidget):
             rows.append(("Level", f"<span style='color:#d6d6d6'>{self._level}</span>"))
         if self._cs2_level >= 0:
             rows.append(("CS2 level", f"<span style='color:#d6d6d6'>{self._cs2_level}</span>"))
+        tier = TIER_LABELS.get(self.cs2_tier)
+        if tier:
+            rows.append(("Tier", f"<span style='color:#d6d6d6'>{tier}</span>"))
         status = self._status_tip()
         if status:
             rows.append((
@@ -675,6 +684,7 @@ class AccountCard(QWidget):
         else:
             self._set_cooldown(state.cooldown_expires)
         self._cs2_level = state.cs2_level
+        self._prime = state.prime
         self._last_check = state.last_check
         self._check_pending = state.check_pending
         self._refresh_tooltip()

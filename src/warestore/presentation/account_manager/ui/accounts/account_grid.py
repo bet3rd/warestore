@@ -59,6 +59,7 @@ class AccountGrid(QWidget):
         self._filter_colors: set[str] = set()
         self._filter_no_cooldown = False
         self._filter_no_bans = False
+        self._filter_tiers: set[str] = set()
 
     def cards(self) -> list[AccountCard]:
         return list(self._cards)
@@ -101,7 +102,10 @@ class AccountGrid(QWidget):
         self._resize_to_content()
 
     def has_active_filters(self) -> bool:
-        return bool(self._filter_colors or self._filter_no_cooldown or self._filter_no_bans)
+        return bool(
+            self._filter_colors or self._filter_no_cooldown or self._filter_no_bans
+            or self._filter_tiers
+        )
 
     def _card_matches(self, card: AccountCard) -> bool:
         q = self._search_query.lower().strip()
@@ -116,6 +120,8 @@ class AccountGrid(QWidget):
             return False
         if self._filter_no_bans and card.is_banned:
             return False
+        if self._filter_tiers and card.cs2_tier not in self._filter_tiers:
+            return False
         return True
 
     def filtered_cards(self) -> list[AccountCard]:
@@ -124,11 +130,13 @@ class AccountGrid(QWidget):
         return [card for card in self._cards if self._card_matches(card)]
 
     def set_filters(
-        self, *, colors: set[str], no_cooldown: bool, no_bans: bool
+        self, *, colors: set[str], no_cooldown: bool, no_bans: bool,
+        tiers: set[str] = frozenset(),
     ) -> None:
         self._filter_colors = set(colors)
         self._filter_no_cooldown = no_cooldown
         self._filter_no_bans = no_bans
+        self._filter_tiers = set(tiers)
         self.reapply_filters()
 
     def reapply_filters(self) -> None:
