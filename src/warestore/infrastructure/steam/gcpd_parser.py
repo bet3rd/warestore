@@ -93,6 +93,15 @@ def looks_like_gcpd_page(html: str) -> bool:
     return _ci(html, "generic_kv_table") or _ci(html, "Personal Game Data")
 
 
+_PROFILE_RANK_RE = re.compile(r"Profile Rank:\s*(\d+)", re.I)
+
+
+def parse_profile_rank(html: str) -> int:
+    """CS2 level from GCPD's ``tab=accountmain`` ("CS:GO Profile Rank: N"); -1 if absent."""
+    m = _PROFILE_RANK_RE.search(_strip_tags(html))
+    return int(m.group(1)) if m else -1
+
+
 def parse_matchmaking(html: str, now: int | None = None) -> Cs2Rank:
     """Scrape Premier/Wingman + cooldown from the matchmaking-tab HTML."""
     out = Cs2Rank()
@@ -132,6 +141,8 @@ def parse_matchmaking(html: str, now: int | None = None) -> Cs2Rank:
                     skill_col = c
                 if wins_col < 0 and _ci(cell, "Wins"):
                     wins_col = c
+            if skill_col < 0 and wins_col < 0 and len(header) < 5:
+                continue  # "Mode | Last Match" only — no ranks or wins in it
             if skill_col < 0:
                 skill_col = 4
             if wins_col < 0:

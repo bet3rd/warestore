@@ -75,3 +75,22 @@ def test_page_signatures():
     assert looks_like_gcpd_page(_kv(RANKS))
     assert looks_like_login_page("<html><title>Sign In</title>g_steamID = false;</html>")
     assert not looks_like_gcpd_page("<html><title>Sign In</title></html>")
+
+
+def test_parse_profile_rank():
+    from warestore.infrastructure.steam.gcpd_parser import parse_profile_rank
+
+    html = ('<div class="generic_kv_line">Last known IP address: 1.2.3.4</div>'
+            '<div class="generic_kv_line">CS:GO Profile Rank: 33</div>')
+    assert parse_profile_rank(html) == 33
+    assert parse_profile_rank("<html>nothing</html>") == -1
+
+
+def test_last_match_only_table_is_not_read_as_wins():
+    html = _kv(
+        "<tr><th>Matchmaking Mode</th><th>Last Match</th></tr>"
+        "<tr><td>Competitive</td><td>2025-08-09 00:17:23 GMT</td></tr>"
+        "<tr><td>Wingman</td><td>2024-12-07 07:58:44 GMT</td></tr>"
+    )
+    rank = parse_matchmaking(html, now=NOW)
+    assert (rank.wingman_rank, rank.wingman_wins, rank.premier_wins) == (-1, -1, -1)
