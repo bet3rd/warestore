@@ -296,3 +296,61 @@ def test_check_accounts_single_account_status_has_no_counter():
     coord.check_accounts([acc])
     coord._on_check_started("a")
     assert coord._info.text == "Checking Alice…"
+
+
+LOADOUT_ONLY = CheckSteps(loadout=True, workshop=False, stats=False)
+
+
+def test_queue_merges_two_limited_requests_for_the_same_account():
+    q = AccountCheckQueue()
+    q.add(["a"], STATS_ONLY)
+    q.add(["a"], LOADOUT_ONLY)  # e.g. Refresh stats, then Override Config
+    assert q.pop() == ("a", CheckSteps(loadout=True, workshop=False, stats=True))
+
+
+def _menu_coord(settings_steps):
+    from warestore.presentation.account_manager.features.accounts.coordinator import (
+        AccountCoordinator,
+    )
+
+    class Ctrl:
+        source = "src"
+
+        def account_check_steps(self):
+            return settings_steps
+
+        def saved_token_entry(self, sid):
+            return {"token": "tok"} if sid != "notoken" else {}
+
+        def cs2_config_source(self):
+            return self.source
+
+        def apply_cs2_config(self, sid):
+            return True
+
+    coord = AccountCoordinator.__new__(AccountCoordinator)
+    coord._ctrl = Ctrl()
+    coord._info = type("Info", (), {"text": "", "setText": lambda self, t: setattr(self, "text", t)})()
+    coord.apply_card_metadata = lambda: None
+    coord.queued = []
+    coord.check_accounts = lambda accounts, steps=None: coord.queued.append(
+        ([a["steamid"] for a in accounts], steps))
+    return coord
+
+
+def test_check_account_never_copies_the_loadout():
+    coord = _menu_coord(CheckSteps(loadout=True, stats=True, workshop=True))
+    coord.check_account_menu([{"steamid": "a"}])
+    assert coord.queued == [(["a"], CheckSteps(loadout=False, stats=True, workshop=True))]
+
+
+def test_check_account_with_nothing_left_to_do_says_so():
+    coord = _menu_coord(CheckSteps(loadout=True, stats=False, workshop=False))
+    coord.check_account_menu([{"steamid": "a"}])
+    assert coord.queued == [] and "nothing" in coord._info.text.lower()
+
+
+def test_override_config_also_copies_the_loadout():
+    coord = _menu_coord(CheckSteps())
+    coord.apply_cs2_source([{"steamid": "a"}, {"steamid": "src"}, {"steamid": "notoken"}])
+    assert coord.queued == [(["a"], LOADOUT_ONLY)]

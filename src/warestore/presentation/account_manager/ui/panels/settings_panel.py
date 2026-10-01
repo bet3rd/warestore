@@ -334,7 +334,7 @@ class SettingsPanel:
         layout.addWidget(SectionLabel("CS2 Account Check"))
         check_hint = QLabel(
             "One sign-in to Steam's servers when an account is added (right-click "
-            "→ Check account runs it later). Invisible to friends."
+            "→ Check account runs it later, without the loadout). Invisible to friends."
         )
         check_hint.setObjectName("info")
         check_hint.setWordWrap(True)
@@ -348,7 +348,8 @@ class SettingsPanel:
             cb.setChecked(bool(self._settings.get(key, True)))
             layout.addWidget(cb)
         self.cb_check_loadout.setToolTip(
-            "Copies the CS2 config source account's weapon picks (not skins).\n"
+            "Copies the CS2 config source account's weapon picks (not skins)\n"
+            "when a token is added. Override Config always copies them.\n"
             "Needs the source account to have a saved token."
         )
         self.cb_check_workshop.setToolTip(

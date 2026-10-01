@@ -24,6 +24,10 @@ from warestore.presentation.account_manager.support.account_targets import (
 )
 
 
+# Override Config's follow-up: just the weapon picks from the source.
+LOADOUT_ONLY = CheckSteps(loadout=True, stats=False, workshop=False)
+
+
 class AccountCoordinator:
     def __init__(
         self,
@@ -198,10 +202,13 @@ class AccountCoordinator:
         self._ctrl.save_settings(self._settings)
 
     def apply_cs2_source(self, accounts) -> None:
+        """Right-click "Override Config": copy the source's CS2 config, then
+        queue a loadout-only check so its weapon picks follow too."""
         targets = normalize_account_targets(accounts)
         if not targets:
             return
-        if not self._ctrl.cs2_config_source():
+        source = self._ctrl.cs2_config_source()
+        if not source:
             self._info.setText("No CS2 config source set.")
             return
         applied = 0
@@ -216,6 +223,13 @@ class AccountCoordinator:
         else:
             self._info.setText("No CS2 config applied (source has no 730 config?).")
         self.apply_card_metadata()
+        loadout_targets = [
+            acc for acc in targets
+            if acc.get("steamid") and acc["steamid"] != source
+            and self._ctrl.saved_token_entry(acc["steamid"]).get("token")
+        ]
+        if loadout_targets:
+            self.check_accounts(loadout_targets, steps=LOADOUT_ONLY)
 
     def copy_export_tokens(self, accounts) -> None:
         self._export_tokens(accounts, clipboard=True, save_file=False)
@@ -376,6 +390,16 @@ class AccountCoordinator:
             card = self._card_for(sid)
             if card:
                 card.set_check_state("queued")
+
+    def check_account_menu(self, accounts) -> None:
+        """Right-click "Check account": the user's Stats/Workshop settings, but
+        never the loadout — that's copied only on token add and Override Config."""
+        settings = self._ctrl.account_check_steps()
+        steps = CheckSteps(loadout=False, stats=settings.stats, workshop=settings.workshop)
+        if not (steps.stats or steps.workshop):
+            self._info.setText("Nothing to check — Stats and Workshop are both off in Settings.")
+            return
+        self.check_accounts(accounts, steps=steps)
 
     def refresh_stats(self, accounts) -> None:
         """Right-click "Refresh stats" / the main-panel button: a stats-only

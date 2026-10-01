@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
         ui.account_grid.cs2_source_set_requested.connect(self._accounts.set_cs2_source)
         ui.account_grid.cs2_apply_requested.connect(self._accounts.apply_cs2_source)
         ui.account_grid.stats_requested.connect(self._accounts.refresh_stats)
-        ui.account_grid.check_requested.connect(self._accounts.check_accounts)
+        ui.account_grid.check_requested.connect(self._accounts.check_account_menu)
         ui.account_grid.hwid_reset_requested.connect(self._accounts.reset_hwid)
         ui._btn_cs2_ranks.clicked.connect(self._accounts.refresh_all_stats)
         ui._btn_refresh.clicked.connect(lambda: self._accounts.load_accounts(refresh_status=True))

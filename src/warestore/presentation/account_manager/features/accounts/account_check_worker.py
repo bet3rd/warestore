@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 
 class AccountCheckQueue:
     """FIFO of (steam_id, steps) pairs. ``steps=None`` means "whatever the
-    user's settings say" — today's "Check account" behaviour, treated here as
-    the strongest/"full" level. A re-enqueue of an id already queued upgrades
-    a more limited steps value (e.g. "Refresh stats") to that full level, but
-    never downgrades a full item to a more limited one."""
+    user's settings say", treated here as the strongest/"full" level. A
+    re-enqueue of an id already queued merges the two requests — None wins,
+    otherwise each step runs if either asked for it (e.g. "Refresh stats" then
+    "Override Config" does both) — and never drops a step already queued."""
 
     def __init__(self) -> None:
         self._items: dict[str, CheckSteps | None] = {}
@@ -37,8 +37,7 @@ class AccountCheckQueue:
             if not sid or sid == self._current:
                 continue
             if sid in self._items:
-                if self._items[sid] is not None and steps is None:
-                    self._items[sid] = None  # upgrade to full; never downgrade
+                self._items[sid] = _merge(self._items[sid], steps)
                 continue
             self._items[sid] = steps
             added += 1
@@ -55,6 +54,16 @@ class AccountCheckQueue:
 
     def __len__(self) -> int:
         return len(self._items)
+
+
+def _merge(a: CheckSteps | None, b: CheckSteps | None) -> CheckSteps | None:
+    if a is None or b is None:
+        return None
+    return CheckSteps(
+        loadout=a.loadout or b.loadout,
+        stats=a.stats or b.stats,
+        workshop=a.workshop or b.workshop,
+    )
 
 
 class AccountCheckWorker(QThread):
