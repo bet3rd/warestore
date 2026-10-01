@@ -213,3 +213,16 @@ def test_switch_worker_options_has_no_local_workshop_disable():
         mode="native", acc={"steamid": "1"}
     )
     assert "disable_workshop" not in opts
+
+
+def test_relogin_never_triggers_account_check():
+    presenter = AccountManagerPresenter(_FakeController())
+    relogin = presenter.switch_worker_options(mode="token", acc={"steamid": "1"}, token="t")
+    assert relogin["check_account"] is False
+
+
+def test_paste_add_triggers_account_check_when_enabled():
+    ctrl = _FakeController()
+    presenter = AccountManagerPresenter(ctrl)
+    opts = presenter.switch_worker_options(mode="token", token="t", is_add=True)
+    assert opts["check_account"] is True

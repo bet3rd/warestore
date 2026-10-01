@@ -35,6 +35,7 @@ class LoginPresenter:
         mode: str,
         acc: dict | None = None,
         token: str = "",
+        is_add: bool = False,
     ) -> dict:
         cfg = self._ctrl.load_settings()
         return {
@@ -47,6 +48,9 @@ class LoginPresenter:
             "disable_remote_play": cfg.get("disable_remote_play", True),
             "add_account_only": cfg.get("add_account_only", False),
             "spoof_on_login": cfg.get("spoof_on_login", False),
+            # Only a pasted NEW token runs the account check; re-login reuses
+            # token mode and must not.
+            "check_account": bool(is_add and cfg.get("account_check_on_add", True)),
         }
 
     @staticmethod

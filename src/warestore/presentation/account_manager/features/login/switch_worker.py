@@ -2,12 +2,17 @@
 # Copyright (C) 2026 bet3rd
 
 import logging
+import time
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from warestore.application.account_manager.controller import AccountManagerController
 
 logger = logging.getLogger(__name__)
+
+# Upper bound for the account check on add, so a slow/unreachable Steam never
+# holds up the first login for long. Checked between steps.
+ADD_CHECK_BUDGET = 40.0
 
 
 class SwitchWorker(QThread):
@@ -25,6 +30,7 @@ class SwitchWorker(QThread):
         disable_remote_play: bool = False,
         add_account_only: bool = False,
         spoof_on_login: bool = False,
+        check_account: bool = False,
         *,
         ctrl: AccountManagerController,
     ):
@@ -39,6 +45,7 @@ class SwitchWorker(QThread):
         self.disable_remote_play = disable_remote_play
         self.add_account_only = add_account_only
         self.spoof_on_login = spoof_on_login
+        self.check_account = check_account
 
     def run(self):
         try:
@@ -85,6 +92,8 @@ class SwitchWorker(QThread):
                     self.status.emit("Applied CS2 launch options from source.")
             except Exception as exc:
                 logger.warning(f"CS2 launch options copy skipped: {exc}")
+        if self.check_account and self.mode == "token":
+            self._run_account_check()
         if self.add_account_only:
             logger.info("Account added — leaving Steam closed (add-only mode).")
             return
@@ -119,3 +128,20 @@ class SwitchWorker(QThread):
                 " — falling back to normal Steam launch."
             )
             self._ctrl.launch_steam(open_cs2=open_cs2)
+
+    def _run_account_check(self) -> None:
+        """One CS2 server session for the freshly added account, before Steam
+        starts (Steam is closed here, so the account isn't in use). Never blocks
+        the login: any failure is logged and Steam still launches."""
+        steam_id = self._ctrl.steam_id_for_entry(self.token)
+        if not steam_id:
+            return
+        self.status.emit("Checking account…")
+        try:
+            source = self._ctrl.read_source_loadout()
+            result = self._ctrl.check_account(
+                steam_id, source=source, deadline=time.monotonic() + ADD_CHECK_BUDGET
+            )
+            self.status.emit(f"Account check: {result.summary()}")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Account check skipped: {type(exc).__name__}")

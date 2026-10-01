@@ -105,7 +105,7 @@ class LoginCoordinator:
             )
             return
         self._set_token_error("")
-        self.start_switch(mode="token", token=token_str)
+        self.start_switch(mode="token", token=token_str, is_add=True)
 
     def switch_selected(self) -> None:
         acc = self._get_selected()
@@ -129,9 +129,10 @@ class LoginCoordinator:
         mode: str,
         token: str = "",
         acc: dict | None = None,
+        is_add: bool = False,
     ) -> None:
         target = acc or self._get_selected()
-        opts = self._presenter.switch_worker_options(mode=mode, acc=target, token=token)
+        opts = self._presenter.switch_worker_options(mode=mode, acc=target, token=token, is_add=is_add)
         label = self._presenter.switch_label(mode, target)
         self._worker = SwitchWorker(**opts, ctrl=self._ctrl)
         self._worker.status.connect(lambda msg: self._set_busy(True, msg))

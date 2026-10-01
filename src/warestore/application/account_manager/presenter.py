@@ -84,8 +84,9 @@ class AccountManagerPresenter:
         mode: str,
         acc: dict | None = None,
         token: str = "",
+        is_add: bool = False,
     ) -> dict:
-        return self._login.switch_worker_options(mode=mode, acc=acc, token=token)
+        return self._login.switch_worker_options(mode=mode, acc=acc, token=token, is_add=is_add)
 
     def switch_label(self, mode: str, acc: dict | None) -> str:
         return self._login.switch_label(mode, acc)
