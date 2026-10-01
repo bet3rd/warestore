@@ -41,7 +41,7 @@ def test_tooltip_shows_cs2_level_and_last_check(_app):
     card.set_view_state(_state(cs2_level=6, last_check=1, last_check_summary="Workshop −3"))
     tip = card.toolTip()
     assert "CS2 level" in tip and ">6<" in tip
-    assert "Workshop −3" in tip
+    assert "Checked" in tip and "Workshop" not in tip
 
 
 def test_tooltip_shows_pending_and_checking(_app):

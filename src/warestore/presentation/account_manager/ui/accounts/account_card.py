@@ -221,7 +221,6 @@ class AccountCard(QWidget):
         self._cs2_cooldown_expires: int = 0
         self._cs2_level: int = -1
         self._last_check: int = 0
-        self._last_check_summary: str = ""
         self._check_pending: bool = False
         self._check_state: str = "idle"
         self._spin_angle: float = 0.0
@@ -612,12 +611,7 @@ class AccountCard(QWidget):
             rows.append(("Check", "<span style='color:#8a7a5a'>Check pending (account was in use)</span>"))
         elif self._last_check:
             ago = format_ago(self._last_check, int(time.time()))
-            rows.append((
-                "Checked",
-                f"<span style='color:#d6d6d6'>{esc(ago)}</span>"
-                + (f"<span style='color:#8a8a8a'> · {esc(self._last_check_summary)}</span>"
-                   if self._last_check_summary else ""),
-            ))
+            rows.append(("Checked", f"<span style='color:#d6d6d6'>{esc(ago)}</span>"))
         if self._color and QColor(self._color).isValid():
             rows.append((
                 "Tag",
@@ -671,7 +665,6 @@ class AccountCard(QWidget):
             self._set_cooldown(state.cooldown_expires)
         self._cs2_level = state.cs2_level
         self._last_check = state.last_check
-        self._last_check_summary = state.last_check_summary
         self._check_pending = state.check_pending
         self._refresh_tooltip()
         self.update()
