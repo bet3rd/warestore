@@ -23,6 +23,12 @@ class AccountRecord:
     wingman_rank: int = -1
     wingman_wins: int = -1
     cs2_cooldown_expires: int = 0
+    # Last account check (one CM/GC session): CS2 level, when, what it did, and
+    # whether the last attempt was skipped because the account was in use.
+    cs2_level: int = -1
+    last_check: int = 0
+    last_check_summary: str = ""
+    check_pending: bool = False
 
     @classmethod
     def from_raw(cls, raw: object) -> "AccountRecord":
@@ -43,6 +49,10 @@ class AccountRecord:
                 wingman_rank=int(raw.get("wingman_rank", -1)),
                 wingman_wins=int(raw.get("wingman_wins", -1)),
                 cs2_cooldown_expires=int(raw.get("cs2_cooldown_expires", 0)),
+                cs2_level=int(raw.get("cs2_level", -1)),
+                last_check=int(raw.get("last_check", 0)),
+                last_check_summary=str(raw.get("last_check_summary", "")),
+                check_pending=bool(raw.get("check_pending", False)),
             )
         return cls()
 
@@ -61,4 +71,8 @@ class AccountRecord:
             "wingman_rank": self.wingman_rank,
             "wingman_wins": self.wingman_wins,
             "cs2_cooldown_expires": self.cs2_cooldown_expires,
+            "cs2_level": self.cs2_level,
+            "last_check": self.last_check,
+            "last_check_summary": self.last_check_summary,
+            "check_pending": self.check_pending,
         }

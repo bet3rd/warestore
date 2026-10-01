@@ -94,3 +94,34 @@ def test_cs2_rank_defaults_when_absent(tmp_path):
     rec = repo.get("1")
     assert rec.premier_rating == -1 and rec.wingman_rank == -1 and rec.cs2_cooldown_expires == 0
     assert rec.premier_wins == -1 and rec.wingman_wins == -1
+
+
+def test_account_check_roundtrip(tmp_path):
+    from warestore.infrastructure.persistence.metadata_repository import AccountMetadataRepository
+
+    repo = AccountMetadataRepository(str(tmp_path / "meta.json"))
+    repo.set_account_check(
+        "76561198000000001", summary="Workshop −3 · Loadout from src",
+        cs2_level=6, premier_rating=15_000, premier_wins=30, cooldown_expires=0, now=1_700_000_000,
+    )
+    rec = repo.get("76561198000000001")
+    assert (rec.cs2_level, rec.premier_rating, rec.premier_wins) == (6, 15_000, 30)
+    assert rec.last_check == 1_700_000_000 and rec.last_check_summary.startswith("Workshop")
+    assert rec.check_pending is False
+
+
+def test_pending_check_keeps_previous_results(tmp_path):
+    from warestore.infrastructure.persistence.metadata_repository import AccountMetadataRepository
+
+    repo = AccountMetadataRepository(str(tmp_path / "meta.json"))
+    repo.set_account_check("1", summary="ok", cs2_level=6, now=100)
+    repo.set_account_check("1", pending=True)
+    rec = repo.get("1")
+    assert rec.check_pending and rec.cs2_level == 6 and rec.last_check == 100
+
+
+def test_old_records_default_new_fields():
+    from warestore.domain.accounts.models import AccountRecord
+
+    rec = AccountRecord.from_raw({"color": "#fff"})
+    assert (rec.cs2_level, rec.last_check, rec.last_check_summary, rec.check_pending) == (-1, 0, "", False)

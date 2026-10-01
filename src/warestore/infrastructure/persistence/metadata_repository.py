@@ -89,6 +89,37 @@ class AccountMetadataRepository:
         data[steam_id] = record.to_dict()
         self._save(data)
 
+    def set_account_check(
+        self,
+        steam_id: str,
+        *,
+        summary: str = "",
+        pending: bool = False,
+        cs2_level: int | None = None,
+        premier_rating: int | None = None,
+        premier_wins: int | None = None,
+        cooldown_expires: int | None = None,
+        now: int | None = None,
+    ) -> None:
+        """Store an account check. ``pending=True`` only flags a skipped attempt
+        and keeps the previous results. ``None`` stats are left untouched."""
+        data = self._load()
+        record = AccountRecord.from_raw(data.get(steam_id, {}))
+        record.check_pending = pending
+        if not pending:
+            record.last_check = int(now if now is not None else datetime.now().timestamp())
+            record.last_check_summary = summary
+            if cs2_level is not None:
+                record.cs2_level = int(cs2_level)
+            if premier_rating is not None:
+                record.premier_rating = int(premier_rating)
+            if premier_wins is not None:
+                record.premier_wins = int(premier_wins)
+            if cooldown_expires is not None:
+                record.cs2_cooldown_expires = int(cooldown_expires)
+        data[steam_id] = record.to_dict()
+        self._save(data)
+
     def clear_cooldown(self, steam_id: str) -> None:
         data = self._load()
         record = AccountRecord.from_raw(data.get(steam_id, {}))
