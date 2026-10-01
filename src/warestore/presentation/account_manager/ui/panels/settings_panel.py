@@ -265,7 +265,7 @@ class SettingsPanel:
 
         layout.addWidget(SectionLabel("CS2 Account Check"))
         check_hint = QLabel(
-            "Runs when a token is added. Invisible to friends.\n"
+            "Runs when a token is added.\n"
             "Right-click → CS2 → Check account refreshes stats."
         )
         check_hint.setObjectName("info")
