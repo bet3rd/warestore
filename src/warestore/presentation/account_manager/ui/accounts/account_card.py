@@ -162,6 +162,17 @@ def _rating_font(px: int, weight: int = 800) -> QFont:
     return f
 
 
+def format_ago(ts: int, now: int) -> str:
+    delta = max(0, now - ts)
+    if delta < 60:
+        return "just now"
+    if delta < 3600:
+        return f"{delta // 60}m ago"
+    if delta < 86400:
+        return f"{delta // 3600}h ago"
+    return f"{delta // 86400}d ago"
+
+
 class AccountCard(QWidget):
     # Portrait card: avatar + name up top, a divider, then a single footer line
     # carrying the CS2 rank / cooldown badges (see _paint_footer). 4 per row.
@@ -207,6 +218,11 @@ class AccountCard(QWidget):
         self._wingman_rank: int = 0
         self._wingman_wins: int = -1
         self._cs2_cooldown_expires: int = 0
+        self._cs2_level: int = -1
+        self._last_check: int = 0
+        self._last_check_summary: str = ""
+        self._check_pending: bool = False
+        self._checking: bool = False
         self._menu_state = AccountCardMenuState(
             username=acc.get("account_name", ""),
             steam_id=acc.get("steamid", ""),
@@ -355,6 +371,15 @@ class AccountCard(QWidget):
         self._refresh_tooltip()
         self.update()
 
+    def set_premier_and_cooldown(self, premier_rating: int, premier_wins: int, cooldown_expires: int) -> None:
+        """Account-check update: Premier + cooldown from the GC, Wingman untouched."""
+        self.set_cs2_rank(premier_rating, self._wingman_rank, cooldown_expires,
+                          premier_wins, self._wingman_wins)
+
+    def set_checking(self, checking: bool) -> None:
+        self._checking = checking
+        self._refresh_tooltip()
+
     # An expiry further out than any real timed cooldown (Steam uses a far-future
     # value for a "Never"/permanent cooldown) is a PERMANENT competitive ban — it
     # renders as a game ban, not a ticking cooldown.
@@ -467,6 +492,8 @@ class AccountCard(QWidget):
         rows: list[tuple[str, str]] = []  # (label, value-html)
         if self._level is not None:
             rows.append(("Level", f"<span style='color:#d6d6d6'>{self._level}</span>"))
+        if self._cs2_level >= 0:
+            rows.append(("CS2 level", f"<span style='color:#d6d6d6'>{self._cs2_level}</span>"))
         status = self._status_tip()
         if status:
             rows.append((
@@ -503,6 +530,18 @@ class AccountCard(QWidget):
         token = self._token_tip()
         if token:
             rows.append(("Token", f"<span style='color:{token[1]}'>{esc(token[0])}</span>"))
+        if self._checking:
+            rows.append(("Check", "<span style='color:#d6d6d6'>Checking…</span>"))
+        elif self._check_pending:
+            rows.append(("Check", "<span style='color:#8a7a5a'>Check pending (account was in use)</span>"))
+        elif self._last_check:
+            ago = format_ago(self._last_check, int(time.time()))
+            rows.append((
+                "Checked",
+                f"<span style='color:#d6d6d6'>{esc(ago)}</span>"
+                + (f"<span style='color:#8a8a8a'> · {esc(self._last_check_summary)}</span>"
+                   if self._last_check_summary else ""),
+            ))
         if self._color and QColor(self._color).isValid():
             rows.append((
                 "Tag",
@@ -554,6 +593,10 @@ class AccountCard(QWidget):
             self._set_cooldown(self._cs2_cooldown_expires)
         else:
             self._set_cooldown(state.cooldown_expires)
+        self._cs2_level = state.cs2_level
+        self._last_check = state.last_check
+        self._last_check_summary = state.last_check_summary
+        self._check_pending = state.check_pending
         self._refresh_tooltip()
         self.update()
 

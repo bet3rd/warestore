@@ -143,6 +143,10 @@ class AccountsPresenter:
                 has_hwid_profile=account_name in hwid_profile_names,
             ),
             color=color,
+            cs2_level=record.cs2_level if record else -1,
+            last_check=record.last_check if record else 0,
+            last_check_summary=record.last_check_summary if record else "",
+            check_pending=record.check_pending if record else False,
         )
 
     @staticmethod

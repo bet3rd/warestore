@@ -31,3 +31,7 @@ class AccountCardViewState:
     menu: AccountCardMenuState
     color: str = ""
     cooldown_expires: int = 0
+    cs2_level: int = -1
+    last_check: int = 0
+    last_check_summary: str = ""
+    check_pending: bool = False
