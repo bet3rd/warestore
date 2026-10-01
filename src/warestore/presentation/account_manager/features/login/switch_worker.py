@@ -22,7 +22,6 @@ class SwitchWorker(QThread):
         persona_state: int = 7,
         open_cs2: bool = False,
         cs2_options: str = "",
-        disable_workshop: bool = False,
         disable_remote_play: bool = False,
         add_account_only: bool = False,
         spoof_on_login: bool = False,
@@ -37,7 +36,6 @@ class SwitchWorker(QThread):
         self.persona_state = persona_state
         self.open_cs2 = open_cs2
         self.cs2_options = cs2_options
-        self.disable_workshop = disable_workshop
         self.disable_remote_play = disable_remote_play
         self.add_account_only = add_account_only
         self.spoof_on_login = spoof_on_login
@@ -69,16 +67,6 @@ class SwitchWorker(QThread):
         )
 
     def _post_login(self, steam_dir: str | None) -> None:
-        # Workshop downloads are per-account (driven by the account's subscription
-        # list), so we need the SteamID we just logged into. On a native switch
-        # that's acc["steamid"]; a token-add account has no local subscription
-        # file yet (nothing to download), so there's nothing to disable there.
-        if self.disable_workshop and steam_dir and self.acc:
-            steam_id = self.acc.get("steamid")
-            if steam_id:
-                disabled = self._ctrl.disable_cs2_workshop(steam_dir, steam_id)
-                if disabled:
-                    self.status.emit(f"Disabled {disabled} Workshop item(s).")
         # Seed this account's CS2 config from the chosen source account the first
         # time we log into it natively (Steam is closed here, so the folder is in
         # place before CS2 next launches). Token-login adds seed inside

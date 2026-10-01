@@ -16,7 +16,6 @@ class SettingsRepository:
         "close_to_tray": False,
         "auto_remove_expired_tokens": False,
         "gcpd_check_on_launch": False,
-        "disable_workshop": False,
         "disable_remote_play": True,
         "add_account_only": False,
         "spoof_on_login": False,

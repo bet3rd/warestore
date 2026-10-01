@@ -102,9 +102,6 @@ class AccountManagerController:
     ) -> None:
         self._facade.steam_login.set_cs2_launch_options(steam_dir, steam_id, options)
 
-    def disable_cs2_workshop(self, steam_dir: str, steam_id: str) -> int:
-        return self._facade.steam_login.disable_cs2_workshop(steam_dir, steam_id)
-
     # --- cs2 config seeding ---
 
     def cs2_config_source(self) -> str:

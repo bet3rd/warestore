@@ -206,3 +206,10 @@ def test_switch_worker_options_from_settings():
     )
     assert opts["open_cs2"] is True
     assert opts["cs2_options"] == "-high"
+
+
+def test_switch_worker_options_has_no_local_workshop_disable():
+    opts = AccountManagerPresenter(_FakeController()).switch_worker_options(
+        mode="native", acc={"steamid": "1"}
+    )
+    assert "disable_workshop" not in opts

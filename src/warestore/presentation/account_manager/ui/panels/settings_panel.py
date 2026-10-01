@@ -89,7 +89,6 @@ class SettingsPanel:
         self._settings = settings
         self.cb_cs2 = QCheckBox("Open CS2 on Login")
         self.le_opts = QLineEdit()
-        self.cb_workshop = QCheckBox("Auto-disable Workshop maps on switch")
         self.cb_cs2_cloud = QCheckBox("Disable CS2 Cloud on copied configs")
         self.cb_remote_play = QCheckBox("Disable Remote Play on login")
         self.cb_add_only = QCheckBox("Add account only (don't open Steam)")
@@ -216,14 +215,6 @@ class SettingsPanel:
         self.le_opts.setText(self._settings.get("cs2_launch_options", ""))
         self.le_opts.setVisible(self._settings.get("open_cs2", False))
         layout.addWidget(self.le_opts)
-
-        self.cb_workshop.setChecked(self._settings.get("disable_workshop", False))
-        self.cb_workshop.setToolTip(
-            "On every account switch, marks the account's CS2 Workshop\n"
-            "subscriptions as disabled locally so Steam won't download or\n"
-            "mount them. Nothing is unsubscribed — it's reversible."
-        )
-        layout.addWidget(self.cb_workshop)
 
         self.cb_cs2_cloud.setChecked(self._settings.get("cs2_disable_cloud", True))
         self.cb_cs2_cloud.setToolTip(

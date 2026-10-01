@@ -44,7 +44,6 @@ class LoginPresenter:
             "persona_state": 7,
             "open_cs2": cfg.get("open_cs2", False),
             "cs2_options": cfg.get("cs2_launch_options", ""),
-            "disable_workshop": cfg.get("disable_workshop", False),
             "disable_remote_play": cfg.get("disable_remote_play", True),
             "add_account_only": cfg.get("add_account_only", False),
             "spoof_on_login": cfg.get("spoof_on_login", False),
