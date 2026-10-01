@@ -9,7 +9,7 @@ same CM-logon web access token the account check already minted for Workshop,
 so this never logs on again on its own). This gateway only does the read-only
 GCPD GET and parses it — it never touches a token or calls any auth endpoint.
 
-Every step logs at INFO so the dev console shows exactly what happened.
+Each step logs at DEBUG; failures log as warnings.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ class Cs2RankScrapeGateway:
         if html is None:
             return None
         rank = parse_matchmaking(html)
-        logger.info(
+        logger.debug(
             "cs2-rank: %s parsed -> premier=%s wingman=%s cooldown_unix=%s",
             steam_id64, rank.premier_rating, rank.wingman_rank, rank.cooldown_expires_unix,
         )
@@ -56,7 +56,7 @@ class Cs2RankScrapeGateway:
         if html is None:
             return -1, -1
         level, medal = parse_profile_rank(html), parse_service_medal(html)
-        logger.info("cs2-rank: %s parsed -> level=%s service_medal=%s", steam_id64, level, medal)
+        logger.debug("cs2-rank: %s parsed -> level=%s service_medal=%s", steam_id64, level, medal)
         return level, medal
 
     def _scrape(self, steam_id64: int, cookies: dict, tab: str = "matchmaking") -> str | None:
@@ -68,7 +68,7 @@ class Cs2RankScrapeGateway:
         req = urllib.request.Request(
             url, headers={"Cookie": header, "User-Agent": "Mozilla/5.0"}
         )
-        logger.info("cs2-rank: scraping GCPD for %s (read-only)", steam_id64)
+        logger.debug("cs2-rank: scraping GCPD for %s (read-only)", steam_id64)
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as r:
                 html = r.read().decode("utf-8", "replace")
@@ -81,5 +81,5 @@ class Cs2RankScrapeGateway:
                 looks_like_login_page(html), looks_like_gcpd_page(html),
             )
             return None
-        logger.info("cs2-rank: GCPD page fetched (%d bytes)", len(html))
+        logger.debug("cs2-rank: GCPD page fetched (%d bytes)", len(html))
         return html

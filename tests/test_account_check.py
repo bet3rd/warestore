@@ -298,17 +298,24 @@ def test_unexpected_error_marks_remaining_steps_failed_and_saves_nothing(svc):
     assert meta.calls == []
 
 
-def test_logs_are_readable_and_never_leak_the_token(svc, caplog):
+def test_one_info_line_per_check(svc, caplog):
     service, _ = svc
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.INFO, logger="warestore")
+    service.check(TARGET, CheckSteps(), _source())
+    lines = [r.getMessage() for r in caplog.records if r.levelno >= logging.INFO]
+    assert len(lines) == 1, lines
+    line = lines[0]
+    assert line.startswith(f"account-check: {TARGET} — Prime, CS2 level 6")
+    assert "Workshop −3" in line and "Loadout from src" in line
+
+
+def test_logs_never_leak_the_token_even_at_debug(svc, caplog):
+    service, _ = svc
+    caplog.set_level(logging.DEBUG, logger="warestore")
     token = "tok-" + TARGET  # matches the svc fixture's token_for
-    result = service.check(TARGET, CheckSteps(), _source())
+    service.check(TARGET, CheckSteps(), _source())
     text = "\n".join(r.getMessage() for r in caplog.records)
-    assert "signing in (offline)" in text
-    assert "stats:" in text
-    assert "Workshop:" in text
-    assert "loadout:" in text
-    assert f"done: {result.summary()}" in text
+    assert "signing in (offline)" in text  # the step detail is still there at DEBUG
     assert token not in text
 
 

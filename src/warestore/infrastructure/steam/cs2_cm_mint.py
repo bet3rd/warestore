@@ -154,7 +154,7 @@ def open_cm_client(refresh_token: str, deadline: float | None = None):
         # blocked or there's no network. connect() returns False on failure —
         # None only means "already connecting" — so that's what we check.
         if not client.connected and not client.connect(retry=2):
-            logger.info("cm-logon: attempt %d could not connect to a CM", attempt)
+            logger.debug("cm-logon: attempt %d could not connect to a CM", attempt)
             continue
         timeout = 30.0
         if deadline is not None:
@@ -164,7 +164,7 @@ def open_cm_client(refresh_token: str, deadline: float | None = None):
             return client, steamid, token
         reason = (EResult(resp.body.eresult).name if resp is not None
                   and resp.body.eresult in EResult._value2member_map_ else "no response")
-        logger.info("cm-logon: attempt %d failed (%s)", attempt, reason)
+        logger.debug("cm-logon: attempt %d failed (%s)", attempt, reason)
         try:
             client.disconnect()
         except Exception:  # noqa: BLE001

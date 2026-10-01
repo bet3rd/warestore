@@ -108,7 +108,7 @@ class WorkshopWebClient:
             with self._open(req) as resp:
                 return 200 <= resp.status < 300
         except (urllib.error.URLError, OSError) as exc:
-            logger.info("workshop: unsubscribe %s failed: %s", file_id, exc)
+            logger.debug("workshop: unsubscribe %s failed: %s", file_id, exc)
             return False
 
     def clear_all(self) -> tuple[int, int]:
@@ -119,5 +119,5 @@ class WorkshopWebClient:
             else:
                 failed += 1
             self._sleep(_UNSUB_DELAY)
-        logger.info("workshop: %d unsubscribed, %d failed for %s", removed, failed, self._steamid)
+        logger.debug("workshop: %d unsubscribed, %d failed for %s", removed, failed, self._steamid)
         return removed, failed

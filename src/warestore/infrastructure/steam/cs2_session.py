@@ -253,7 +253,7 @@ class Cs2Session:
         after = self.read_loadout()
         matched = sum(1 for key, itemdef in want.items() if after.get(key) == itemdef)
         if matched < len(want):
-            logger.info("loadout: %d/%d slots matched after write", matched, len(want))
+            logger.debug("loadout: %d/%d slots matched after write", matched, len(want))
         return matched, len(want), changed
 
     def profile(self) -> gp.GcProfile | None:

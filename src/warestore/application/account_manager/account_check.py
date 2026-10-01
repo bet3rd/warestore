@@ -96,10 +96,23 @@ class CheckResult:
     loadout_matched: int = 0
     loadout_total: int = 0
     loadout_source: str = ""
+    stats_text: str = ""  # "Prime, CS2 level 12, Premier …" for the log line
 
     @property
     def stats_ok(self) -> bool:
         return self.profile_ok or self.cooldown_ok or self.gcpd_ok
+
+    def log_line(self, elapsed: float) -> str:
+        """The single INFO line for a finished check: full stats, then the rest."""
+        text = self.summary()
+        if self.stats_text:
+            level = f"CS2 level {self.cs2_level}"
+            parts = text.split(" · ")
+            parts = [self.stats_text if p == level else p for p in parts]
+            if self.stats_text not in parts:
+                parts.insert(1 if self.web_only else 0, self.stats_text)
+            text = " · ".join(p for p in parts if p != "nothing to do")
+        return f"{text} ({elapsed:.1f}s)"
 
     def summary(self) -> str:
         if self.token_dead:
@@ -150,31 +163,31 @@ class AccountCheckService:
         sid = self._source_steam_id()
         if not sid:
             reason = "no CS2 config source set"
-            logger.info("account-check: source loadout skipped: %s", reason)
+            logger.debug("account-check: source loadout skipped: %s", reason)
             return SourceLoadout(reason=reason)
         name = self._name_for(sid)
         token = self._token_for(sid)
         if not token:
             reason = "source account has no saved token"
-            logger.info("account-check: source loadout skipped: %s", reason)
+            logger.debug("account-check: source loadout skipped: %s", reason)
             return SourceLoadout(steam_id=sid, name=name, reason=reason)
         try:
             with self._session_factory(token, read_only=True, deadline=deadline) as session:
                 loadout = session.read_loadout()
-                logger.info("account-check: source loadout read from %s", name)
+                logger.debug("account-check: source loadout read from %s", name)
                 return SourceLoadout(steam_id=sid, name=name, loadout=loadout)
         except AccountInUseError as exc:
             reason = f"source account is {exc}"
-            logger.info("account-check: source loadout skipped: %s", reason)
+            logger.debug("account-check: source loadout skipped: %s", reason)
             return SourceLoadout(steam_id=sid, name=name, reason=reason)
         except TokenRejectedError:
             reason = "source account's token was rejected"
-            logger.info("account-check: source loadout skipped: %s", reason)
+            logger.debug("account-check: source loadout skipped: %s", reason)
             return SourceLoadout(steam_id=sid, name=name, reason=reason)
         except Exception as exc:  # noqa: BLE001
             logger.warning("account-check: reading source loadout failed: %s", type(exc).__name__)
             reason = "couldn't read the source loadout"
-            logger.info("account-check: source loadout skipped: %s", reason)
+            logger.debug("account-check: source loadout skipped: %s", reason)
             return SourceLoadout(steam_id=sid, name=name, reason=reason)
 
     def check(
@@ -187,7 +200,7 @@ class AccountCheckService:
     ) -> CheckResult:
         result = CheckResult(steam_id=steam_id)
         acct_name = self._name_for(steam_id)
-        logger.info("account-check: %s (…%s) — signing in (offline)…", acct_name, _short_id(steam_id))
+        logger.debug("account-check: %s (…%s) — signing in (offline)…", acct_name, _short_id(steam_id))
         token = self._token_for(steam_id)
         if not token:
             for name in STEP_NAMES:
@@ -196,7 +209,7 @@ class AccountCheckService:
         t0 = time.monotonic()
         try:
             with self._session_factory(token, deadline=deadline) as session:
-                logger.info("account-check: %s — CS2 server answered in %.1fs", acct_name, time.monotonic() - t0)
+                logger.debug("account-check: %s — CS2 server answered in %.1fs", acct_name, time.monotonic() - t0)
                 self._run_steps(session, steps, source, result, deadline, acct_name)
         except TokenRejectedError:
             result.token_dead = True
@@ -210,12 +223,12 @@ class AccountCheckService:
                 logger.info("account-check: %s — skipped: %s", acct_name, reason)
                 self._metadata.set_account_check(steam_id, pending=True)
                 return result
-            logger.info("account-check: %s — %s; web-only check (no CS2, no loadout)", acct_name, reason)
+            logger.debug("account-check: %s — %s; web-only check (no CS2, no loadout)", acct_name, reason)
             self._web_only_check(token, steps, result, deadline, acct_name)
             if result.token_dead:
                 return result
             if result.web_only:
-                logger.info("account-check: %s — done: %s", acct_name, result.summary())
+                logger.info("account-check: %s — %s", acct_name, result.log_line(time.monotonic() - t0))
                 self._save(result, partial=True)
             else:
                 self._metadata.set_account_check(steam_id, pending=True)
@@ -243,7 +256,7 @@ class AccountCheckService:
             for name in STEP_NAMES:
                 result.outcomes.setdefault(name, StepOutcome("failed", "unexpected error"))
             return result
-        logger.info("account-check: %s — done: %s", acct_name, result.summary())
+        logger.info("account-check: %s — %s", acct_name, result.log_line(time.monotonic() - t0))
         self._save(result)
         return result
 
@@ -298,7 +311,7 @@ class AccountCheckService:
         try:
             gcpd = session.gcpd_rank()
         except Exception as exc:  # noqa: BLE001 - GCPD is best-effort; GC data must still save
-            logger.info("account-check: %s — GCPD scrape failed: %s", name, type(exc).__name__)
+            logger.debug("account-check: %s — GCPD scrape failed: %s", name, type(exc).__name__)
             gcpd = None
 
         if profile is None and cooldown is None and gcpd is None:
@@ -390,7 +403,8 @@ class AccountCheckService:
         )
         if missing:
             line += " (" + ", ".join(missing) + ")"
-        logger.info(line)
+        result.stats_text = line.split(" — stats: ", 1)[1]
+        logger.debug(line)
         return StepOutcome("ok")
 
     def _web_only_check(self, token: str, steps: CheckSteps, result: CheckResult,
@@ -448,36 +462,37 @@ class AccountCheckService:
             result.wingman_wins = gcpd.wingman_wins
             result.cooldown_expires = gcpd.cooldown_expires_unix
             result.cooldown_ok = True
-        logger.info(
-            "account-check: %s — web stats: CS2 level %s, Premier %s, Wingman %s, cooldown %s",
-            name,
+        result.stats_text = "CS2 level {}, Premier {}, Wingman {}, {}".format(
             level if level >= 0 else "unknown",
             f"{result.premier_rating:,}" if result.premier_rating > 0 else "unranked",
             result.wingman_rank if result.wingman_rank > 0 else "unranked",
-            "none" if result.cooldown_expires <= 0 else result.cooldown_expires,
+            "no cooldown" if result.cooldown_expires <= 0 else (
+                "cooldown permanent" if result.cooldown_expires >= COOLDOWN_PERMANENT else "on cooldown"
+            ),
         )
+        logger.debug("account-check: %s — web stats: %s", name, result.stats_text)
         return StepOutcome("ok")
 
     def _workshop(self, session, result: CheckResult, name: str) -> StepOutcome:
         removed, failed = session.clear_workshop()
         result.workshop_removed = removed
         result.workshop_failed = failed
-        logger.info("account-check: %s — Workshop: %d removed, %d failed", name, removed, failed)
+        logger.debug("account-check: %s — Workshop: %d removed, %d failed", name, removed, failed)
         return StepOutcome("ok" if not failed else "failed", f"{failed} not removed" if failed else "")
 
     def _loadout(self, session, source: SourceLoadout, result: CheckResult, name: str) -> StepOutcome:
         if source.loadout is None:
             reason = source.reason or "no source loadout"
-            logger.info("account-check: %s — loadout skipped: %s", name, reason)
+            logger.debug("account-check: %s — loadout skipped: %s", name, reason)
             return StepOutcome("skipped", reason)
         if source.steam_id == result.steam_id:
             reason = "this is the source account"
-            logger.info("account-check: %s — loadout skipped: %s", name, reason)
+            logger.debug("account-check: %s — loadout skipped: %s", name, reason)
             return StepOutcome("skipped", reason)
         matched, total, changed = session.write_loadout(source.loadout)
         result.loadout_matched, result.loadout_total = matched, total
         result.loadout_source = source.name or source.steam_id
-        logger.info(
+        logger.debug(
             "account-check: %s — loadout: %d slots changed, %d/%d match (from %s)",
             name, changed, matched, total, result.loadout_source,
         )
