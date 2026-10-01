@@ -111,6 +111,7 @@ class AccountMetadataRepository:
         partial: bool = False,
         prime: int | None = None,
         service_medal: int | None = None,
+        medals: list[int] | None = None,
         cs2_level: int | None = None,
         premier_rating: int | None = None,
         premier_wins: int | None = None,
@@ -134,6 +135,8 @@ class AccountMetadataRepository:
                     record.prime = int(prime)
                 if service_medal is not None:
                     record.service_medal = int(service_medal)
+                if medals is not None:
+                    record.medals = [int(m) for m in medals]
                 if cs2_level is not None:
                     record.cs2_level = int(cs2_level)
                 if premier_rating is not None:

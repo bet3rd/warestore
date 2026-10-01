@@ -103,3 +103,9 @@ def test_account_profile_carries_the_penalty_reason():
     buf = gp._vfield(1, ACCT) + gp._vfield(4, 600) + gp._vfield(5, 10)
     prof = gp.decode_account_profile(buf)
     assert prof.cooldown_seconds == 600 and prof.penalty_reason == 10
+
+
+def test_account_profile_carries_the_displayed_medals():
+    medals = gp._bfield(9, gp._vfield(7, 874) + gp._vfield(7, 4951) + gp._vfield(8, 874))
+    prof = gp.decode_account_profile(gp._vfield(1, ACCT) + medals)
+    assert prof.medals == (874, 4951)

@@ -97,6 +97,7 @@ class CheckResult:
     loadout_total: int = 0
     loadout_source: str = ""
     stats_text: str = ""  # "Prime, CS2 level 12, Premier …" for the log line
+    medals: tuple[int, ...] | None = None  # None = the GC profile didn't answer
 
     @property
     def stats_ok(self) -> bool:
@@ -150,6 +151,7 @@ class AccountCheckService:
         session_factory=Cs2Session,
         clock: Callable[[], float] = time.monotonic,
         wall_clock: Callable[[], float] = time.time,
+        medal_icons: Callable[[list[int]], None] | None = None,
     ) -> None:
         self._token_for = token_for
         self._name_for = name_for
@@ -158,6 +160,8 @@ class AccountCheckService:
         self._session_factory = session_factory
         self._clock = clock
         self._wall_clock = wall_clock
+        # Caches medal names/icons for the tooltip (network; we're off the Qt thread).
+        self._medal_icons = medal_icons
 
     def read_source_loadout(self, deadline: float | None = None) -> SourceLoadout:
         sid = self._source_steam_id()
@@ -324,6 +328,12 @@ class AccountCheckService:
             if profile.level >= 0:
                 result.cs2_level = profile.level
                 result.level_ok = True
+            result.medals = tuple(profile.medals)
+            if profile.medals and self._medal_icons is not None:
+                try:
+                    self._medal_icons(list(profile.medals))
+                except Exception as exc:  # noqa: BLE001 - icons are cosmetic
+                    logger.debug("account-check: %s — medal icons: %s", name, type(exc).__name__)
         else:
             missing.append("profile didn't answer")
         if not result.level_ok:
@@ -507,6 +517,8 @@ class AccountCheckService:
             kw["prime"] = result.prime
         if result.service_medal >= 0:
             kw["service_medal"] = result.service_medal
+        if result.medals is not None:
+            kw["medals"] = list(result.medals)
         if result.level_ok:
             kw["cs2_level"] = result.cs2_level
         if result.profile_ok or result.gcpd_ok:

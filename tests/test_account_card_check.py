@@ -162,3 +162,14 @@ def test_tooltip_shows_the_cs2_tier(_app):
     assert "Tier" in card.toolTip() and ">Premier<" in card.toolTip()
     card.set_view_state(_state(cs2_level=12, prime=-1))
     assert "Tier" not in card.toolTip()  # unknown until the GC has been asked
+
+
+def test_tooltip_lists_medals_as_icons_with_a_text_fallback(_app, tmp_path):
+    icon = tmp_path / "874.png"
+    icon.write_bytes(b"png")
+    card = _card()
+    card.set_view_state(_state(medals=(("5 Year Veteran Coin", str(icon)), ("2025 Service Medal", None))))
+    tip = card.toolTip()
+    assert "Medals" in tip
+    assert "<img" in tip and "874.png" in tip
+    assert "2025 Service Medal" in tip  # no icon yet -> name instead

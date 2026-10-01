@@ -536,3 +536,25 @@ def test_rate_limited_web_fallback_is_flagged(svc):
                           "web_enter": RateLimitedError("RateLimitExceeded")}
     result = service.check(TARGET, CheckSteps(), _source())
     assert result.rate_limited and result.in_use
+
+
+def test_medals_are_saved_and_their_icons_cached(svc):
+    service, meta = svc
+    cached = []
+    service._medal_icons = cached.extend
+    FakeSession.script = {"profile": gp.GcProfile(level=12, premier_rating=-1, premier_wins=-1, medals=(874, 4951))}
+    service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert meta.calls[-1][1]["medals"] == [874, 4951]
+    assert cached == [874, 4951]
+
+
+def test_a_medal_icon_failure_never_fails_the_check(svc):
+    service, meta = svc
+
+    def boom(_ids):
+        raise OSError("offline")
+
+    service._medal_icons = boom
+    FakeSession.script = {"profile": gp.GcProfile(level=12, premier_rating=-1, premier_wins=-1, medals=(874,))}
+    result = service.check(TARGET, CheckSteps(loadout=False, workshop=False), _source())
+    assert result.outcomes["stats"].status == "ok" and meta.calls[-1][1]["medals"] == [874]

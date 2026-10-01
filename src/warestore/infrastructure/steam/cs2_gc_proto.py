@@ -239,6 +239,7 @@ class GcProfile:
     premier_wins: int = -1
     cooldown_seconds: int = 0  # 0 = none
     penalty_reason: int = 0
+    medals: tuple[int, ...] = ()  # displayed profile medals (item def indexes)
 
 
 def decode_account_profile(buf: bytes) -> GcProfile:
@@ -246,6 +247,7 @@ def decode_account_profile(buf: bytes) -> GcProfile:
     has_level = False
     premier_rating, premier_wins = -1, -1
     cooldown = reason = 0
+    medals: list[int] = []
     for num, wt, v in iter_fields(buf):
         if num == 1:
             account_id = v
@@ -253,6 +255,9 @@ def decode_account_profile(buf: bytes) -> GcProfile:
             cooldown = max(0, _int32(v))
         elif num == 5:
             reason = v
+        elif num == 9 and wt == 2:
+            # PlayerMedalsInfo: field 7 = each displayed medal, 8 = the featured one
+            medals.extend(x for n, _w, x in iter_fields(v) if n == 7)
         elif num == 17:
             level, has_level = v, True
         elif num in (7, 20) and wt == 2:
@@ -268,6 +273,7 @@ def decode_account_profile(buf: bytes) -> GcProfile:
         premier_wins=premier_wins,
         cooldown_seconds=cooldown,
         penalty_reason=reason,
+        medals=tuple(medals),
     )
 
 

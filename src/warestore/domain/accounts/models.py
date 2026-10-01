@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 bet3rd
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -33,6 +33,8 @@ class AccountRecord:
     prime: int = -1
     # From GCPD: 1 earned a service medal, 0 not, -1 unknown.
     service_medal: int = -1
+    # Displayed CS2 profile medals (item def indexes), from the CS2 server.
+    medals: list[int] = field(default_factory=list)
 
     @classmethod
     def from_raw(cls, raw: object) -> "AccountRecord":
@@ -59,6 +61,7 @@ class AccountRecord:
                 check_pending=bool(raw.get("check_pending", False)),
                 prime=int(raw.get("prime", -1)),
                 service_medal=int(raw.get("service_medal", -1)),
+                medals=[int(m) for m in raw.get("medals", []) if str(m).isdigit()],
             )
         return cls()
 
@@ -83,4 +86,5 @@ class AccountRecord:
             "check_pending": self.check_pending,
             "prime": self.prime,
             "service_medal": self.service_medal,
+            "medals": list(self.medals),
         }

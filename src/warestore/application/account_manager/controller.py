@@ -449,8 +449,20 @@ class AccountManagerController:
                 name_for=lambda sid: self.saved_token_entry(sid).get("username", "") or sid,
                 source_steam_id=self.cs2_config_source,
                 metadata=self._facade.metadata,
+                medal_icons=self._medal_catalog().ensure,
             )
         return self._account_check
+
+    def _medal_catalog(self):
+        if getattr(self, "_medals", None) is None:
+            from warestore.infrastructure.steam.cs2_medals import MedalCatalog
+
+            self._medals = MedalCatalog()
+        return self._medals
+
+    def medal_display(self, def_indexes) -> list[tuple[str, str | None]]:
+        """(name, cached icon path or None) per medal — reads the cache only."""
+        return self._medal_catalog().display(def_indexes) if def_indexes else []
 
     def account_check_steps(self) -> CheckSteps:
         return CheckSteps.from_settings(self.load_settings())

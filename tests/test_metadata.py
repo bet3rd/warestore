@@ -162,3 +162,12 @@ def test_service_medal_roundtrip(tmp_path):
     assert repo.get("1").service_medal == -1
     repo.set_account_check("1", summary="ok", service_medal=1, now=100)
     assert repo.get("1").service_medal == 1
+
+
+def test_medals_roundtrip(tmp_path):
+    from warestore.infrastructure.persistence.metadata_repository import AccountMetadataRepository
+
+    repo = AccountMetadataRepository(str(tmp_path / "meta.json"))
+    assert repo.get("1").medals == []
+    repo.set_account_check("1", summary="ok", medals=[874, 4951], now=100)
+    assert repo.get("1").medals == [874, 4951]

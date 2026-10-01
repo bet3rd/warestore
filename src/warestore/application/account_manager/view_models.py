@@ -37,3 +37,4 @@ class AccountCardViewState:
     check_pending: bool = False
     prime: int = -1
     service_medal: int = -1
+    medals: tuple[tuple[str, str | None], ...] = ()  # (name, icon path or None)

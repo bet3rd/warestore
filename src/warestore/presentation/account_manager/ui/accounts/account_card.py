@@ -14,6 +14,7 @@ from PyQt5.QtCore import (
     QPropertyAnimation,
     QRectF,
     Qt,
+    QUrl,
     QVariantAnimation,
     pyqtSignal,
 )
@@ -224,6 +225,7 @@ class AccountCard(QWidget):
         self._cs2_level: int = -1
         self._prime: int = -1
         self._service_medal: int = -1
+        self._medals: tuple[tuple[str, str | None], ...] = ()
         self._last_check: int = 0
         self._check_pending: bool = False
         self._check_state: str = "idle"
@@ -564,6 +566,22 @@ class AccountCard(QWidget):
     def _esc(text: str) -> str:
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+    _MEDALS_PER_LINE = 6
+
+    def _medals_tip(self) -> str:
+        """Medal icons (22px, from the 64px cache), six per line; a medal whose
+        icon isn't cached yet shows its name instead."""
+        parts: list[str] = []
+        for i, (name, path) in enumerate(self._medals):
+            if i and i % self._MEDALS_PER_LINE == 0:
+                parts.append("<br>")
+            if path:
+                src = QUrl.fromLocalFile(path).toString()
+                parts.append(f"<img src='{src}' width='22' height='22'>&nbsp;")
+            else:
+                parts.append(f"<span style='color:#d6d6d6'>{self._esc(name)}</span>&nbsp; ")
+        return "".join(parts)
+
     @staticmethod
     def _wins_suffix(wins: int) -> str:
         """' - N Wins' appended to a rank in the tooltip. Empty when unknown (-1)."""
@@ -585,6 +603,9 @@ class AccountCard(QWidget):
         tier = TIER_LABELS.get(self.cs2_tier)
         if tier:
             rows.append(("Tier", f"<span style='color:#d6d6d6'>{tier}</span>"))
+        medals = self._medals_tip()
+        if medals:
+            rows.append(("Medals", medals))
         status = self._status_tip()
         if status:
             rows.append((
@@ -690,6 +711,7 @@ class AccountCard(QWidget):
         self._cs2_level = state.cs2_level
         self._prime = state.prime
         self._service_medal = state.service_medal
+        self._medals = state.medals
         self._last_check = state.last_check
         self._check_pending = state.check_pending
         self._refresh_tooltip()

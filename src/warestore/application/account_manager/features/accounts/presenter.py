@@ -149,6 +149,7 @@ class AccountsPresenter:
             check_pending=record.check_pending if record else False,
             prime=record.prime if record else -1,
             service_medal=record.service_medal if record else -1,
+            medals=tuple(self._ctrl.medal_display(record.medals)) if record else (),
         )
 
     @staticmethod
