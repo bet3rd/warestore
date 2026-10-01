@@ -35,23 +35,43 @@ class GcUnavailableError(Exception):
     outdated GC_CLIENT_VERSION)."""
 
 
-def account_in_use(steamid64: int) -> tuple[bool, bool]:
-    """(Steam here is logged into this account, cs2.exe is running)."""
-    import psutil
+def _steam_registry() -> tuple[int, int]:
+    """(active_user_id32, running_app_id), each 0 when missing/unreadable."""
+    import winreg
 
-    names = {(p.info.get("name") or "").lower() for p in psutil.process_iter(["name"])}
-    steam_up = "steam.exe" in names
-    cs2_up = "cs2.exe" in names
     active = 0
     try:
-        import winreg
-
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam\ActiveProcess") as key:
             active = int(winreg.QueryValueEx(key, "ActiveUser")[0] or 0)
     except OSError:
         pass
-    logged_in_here = steam_up and active == (steamid64 & 0xFFFFFFFF)
-    return logged_in_here, cs2_up
+    running = 0
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
+            running = int(winreg.QueryValueEx(key, "RunningAppID")[0] or 0)
+    except OSError:
+        pass
+    return active, running
+
+
+def _process_names() -> set[str]:
+    import psutil
+
+    return {(p.info.get("name") or "").lower() for p in psutil.process_iter(["name"])}
+
+
+def account_in_use(steamid64: int) -> str | None:
+    """Human reason the account must be skipped, else None.
+
+    Steam on this PC may be LOGGED INTO the account as long as it isn't
+    PLAYING anything here (another device's play session is caught separately,
+    via the GC's ``ClientPlayingSessionState`` notice during the hello)."""
+    active, running_app = _steam_registry()
+    names = _process_names()
+    logged_in_here = "steam.exe" in names and active == (steamid64 & 0xFFFFFFFF)
+    if logged_in_here and (running_app != 0 or "cs2.exe" in names):
+        return "playing a game on this PC"
+    return None
 
 
 def _default_gc_factory(client):
@@ -70,7 +90,7 @@ class Cs2Session:
         self,
         refresh_token: str,
         *,
-        read_only: bool = False,
+        read_only: bool = False,  # kept for compatibility; no longer affects the in-use rule
         logon=open_cm_client,
         gc_factory=None,
         in_use_probe=account_in_use,
@@ -88,6 +108,7 @@ class Cs2Session:
         self._gc = None
         self._welcome = b""
         self._equip_replies: list[int] = []
+        self._playing_blocked = False
         self.steamid = 0
         self.account_id = 0
 
@@ -107,21 +128,32 @@ class Cs2Session:
 
     def __enter__(self) -> "Cs2Session":
         steamid = _jwt_sub(self._token)
-        logged_in_here, cs2_running = self._in_use_probe(steamid)
-        if logged_in_here and (cs2_running or not self._read_only):
-            raise AccountInUseError("account is in use on this PC")
+        reason = self._in_use_probe(steamid)
+        if reason:
+            raise AccountInUseError(reason)
         self._client, self.steamid, self._token = self._logon(self._token, deadline=self._deadline)
         self.account_id = self.steamid & 0xFFFFFFFF
         try:
             self._gc = self._gc_factory(self._client)
             for emsg in gp.EQUIP_REPLY_MSGS:
                 self._gc.on(emsg, lambda _hdr, _body, _e=emsg: self._equip_replies.append(_e))
+            self._playing_blocked = False
+            self._client.on(gp.MSG_CLIENT_PLAYING_SESSION_STATE, self._on_playing_session_state)
             self._client.games_played([gp.CS2_APP_ID])
             self._welcome = self._hello(self._budget(self.HELLO_TIMEOUT))
         except BaseException:
             self._close()
             raise
         return self
+
+    def _on_playing_session_state(self, msg) -> None:
+        """Steam (not the GC) telling us this account is playing somewhere.
+
+        ValvePython has no body class for ``ClientPlayingSessionState``, so the
+        raw payload bytes are decoded directly."""
+        blocked, _app = gp.decode_playing_session_state(getattr(msg, "payload", None) or b"")
+        if blocked:
+            self._playing_blocked = True
 
     def __exit__(self, *exc) -> None:
         self._close()
@@ -156,6 +188,8 @@ class Cs2Session:
             welcome = self._wait(gp.MSG_CLIENT_WELCOME, min(self.HELLO_RETRY, budget))
             if welcome is not None:
                 return welcome
+            if self._playing_blocked:
+                raise AccountInUseError("playing on another device")
             if time.monotonic() >= deadline:
                 raise GcUnavailableError(
                     f"CS2 GC sent no welcome (GC_CLIENT_VERSION={gp.GC_CLIENT_VERSION})"
@@ -166,10 +200,11 @@ class Cs2Session:
     def read_loadout(self) -> gp.Loadout:
         return gp.resolve_loadout(gp.parse_loadout(self._welcome, self.account_id))
 
-    def write_loadout(self, want: gp.Loadout) -> tuple[int, int]:
+    def write_loadout(self, want: gp.Loadout) -> tuple[int, int, int]:
         before = self.read_loadout()
         to_send = [(team, slot, itemdef) for (team, slot), itemdef in want.items()
                    if before.get((team, slot)) != itemdef]
+        changed = len(to_send)
         if to_send:
             self._equip_replies.clear()
             change_num = gp.so_cache_version(self._welcome) + 1
@@ -183,7 +218,7 @@ class Cs2Session:
         matched = sum(1 for key, itemdef in want.items() if after.get(key) == itemdef)
         if matched < len(want):
             logger.info("loadout: %d/%d slots matched after write", matched, len(want))
-        return matched, len(want)
+        return matched, len(want), changed
 
     def profile(self) -> gp.GcProfile | None:
         self._send(gp.MSG_PROFILE_REQUEST, gp.encode_profile_request(self.account_id))

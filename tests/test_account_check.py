@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from warestore.application.account_manager.account_check import (
@@ -56,7 +58,7 @@ class FakeSession:
         return self._step("clear_workshop", (3, 0))
 
     def write_loadout(self, want):
-        return self._step("write_loadout", (30, 30))
+        return self._step("write_loadout", (30, 30, 2))
 
     def read_loadout(self):
         return self._step("read_loadout", LOADOUT)
@@ -123,9 +125,19 @@ def test_rejected_token_flags_dead_and_saves_nothing(svc):
 
 def test_in_use_marks_pending(svc):
     service, meta = svc
-    FakeSession.script = {"enter": AccountInUseError()}
+    FakeSession.script = {"enter": AccountInUseError("playing a game on this PC")}
     result = service.check(TARGET, CheckSteps(), _source())
     assert result.in_use and meta.calls[-1] == (TARGET, {"pending": True})
+    assert result.in_use_reason == "playing a game on this PC"
+    assert result.summary() == "skipped — playing a game on this PC"
+
+
+def test_in_use_without_a_reason_falls_back_in_the_summary(svc):
+    service, _ = svc
+    FakeSession.script = {"enter": AccountInUseError()}
+    result = service.check(TARGET, CheckSteps(), _source())
+    assert result.in_use_reason == ""
+    assert result.summary() == "skipped — account in use"
 
 
 def test_gc_unavailable_fails_every_step(svc):
@@ -151,6 +163,13 @@ def test_read_source_loadout(svc):
     service, _ = svc
     src = service.read_source_loadout()
     assert src.loadout == LOADOUT and src.name == "src" and FakeSession.last.read_only
+
+
+def test_read_source_loadout_in_use_reason_is_prefixed(svc):
+    service, _ = svc
+    FakeSession.script = {"enter": AccountInUseError("playing a game on this PC")}
+    src = service.read_source_loadout()
+    assert src.reason == "source account is playing a game on this PC"
 
 
 def test_read_source_without_token():
@@ -193,7 +212,7 @@ def test_profile_timeout_does_not_overwrite_saved_level_or_premier(svc):
 
 def test_loadout_partial_still_shows_in_the_summary(svc):
     service, _ = svc
-    FakeSession.script = {"write_loadout": (27, 30)}
+    FakeSession.script = {"write_loadout": (27, 30, 3)}
     result = service.check(TARGET, CheckSteps(), _source())
     assert result.outcomes["loadout"].status == "failed"
     assert "Loadout 27/30 from src" in result.summary()
@@ -214,3 +233,17 @@ def test_unexpected_error_marks_remaining_steps_failed_and_saves_nothing(svc):
     assert {o.status for o in result.outcomes.values()} == {"failed"}
     assert all(o.detail == "unexpected error" for o in result.outcomes.values())
     assert meta.calls == []
+
+
+def test_logs_are_readable_and_never_leak_the_token(svc, caplog):
+    service, _ = svc
+    caplog.set_level(logging.INFO)
+    token = "tok-" + TARGET  # matches the svc fixture's token_for
+    result = service.check(TARGET, CheckSteps(), _source())
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "signing in (offline)" in text
+    assert "stats:" in text
+    assert "Workshop:" in text
+    assert "loadout:" in text
+    assert f"done: {result.summary()}" in text
+    assert token not in text

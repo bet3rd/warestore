@@ -6,10 +6,12 @@ import pytest
 
 from warestore.infrastructure.steam import cs2_gc_proto as gp
 from warestore.infrastructure.steam.cs2_cm_mint import TokenRejectedError
+from warestore.infrastructure.steam import cs2_session
 from warestore.infrastructure.steam.cs2_session import (
     AccountInUseError,
     Cs2Session,
     GcUnavailableError,
+    account_in_use,
 )
 
 SID = 76561198000000001
@@ -26,15 +28,35 @@ class FakeClient:
     def __init__(self):
         self.games = []
         self.disconnected = False
+        self.handlers = {}
+
+    def on(self, emsg, fn):
+        self.handlers.setdefault(emsg, []).append(fn)
 
     def games_played(self, apps):
         self.games.append(list(apps))
+        for fn in self.handlers.get(gp.MSG_CLIENT_PLAYING_SESSION_STATE, []):
+            self._maybe_fire(fn)
+
+    def _maybe_fire(self, fn):
+        pass  # overridden by PlayingElsewhereClient
 
     def disconnect(self):
         self.disconnected = True
 
     def sleep(self, _s):
         pass
+
+
+class PlayingElsewhereClient(FakeClient):
+    """Fires ClientPlayingSessionState(blocked=1, app=730) right after games_played."""
+
+    def _maybe_fire(self, fn):
+        payload = (
+            gp.encode_varint((2 << 3) | 0) + gp.encode_varint(1)
+            + gp.encode_varint((3 << 3) | 0) + gp.encode_varint(730)
+        )
+        fn(type("Msg", (), {"payload": payload})())
 
 
 class FakeGC:
@@ -78,34 +100,48 @@ class FakeGC:
         return None
 
 
-def _session(gc, *, in_use=(False, False), read_only=False, client=None, deadline=None):
+def _session(gc, *, in_use_reason=None, read_only=False, client=None, deadline=None):
     client = client or FakeClient()
     s = Cs2Session(
         _token(),
         read_only=read_only,
         logon=lambda tok, deadline=None: (client, SID, tok),
         gc_factory=lambda c: gc,
-        in_use_probe=lambda sid: in_use,
+        in_use_probe=lambda sid: in_use_reason,
         deadline=deadline,
     )
     s.HELLO_TIMEOUT = 0.01  # tests never wait
     return s, client
 
 
-def test_target_logged_in_here_is_refused():
-    s, _ = _session(FakeGC(), in_use=(True, False))
-    with pytest.raises(AccountInUseError):
+def test_in_use_probe_reason_refuses_with_that_message():
+    s, _ = _session(FakeGC(), in_use_reason="playing a game on this PC")
+    with pytest.raises(AccountInUseError, match="playing a game on this PC"):
         s.__enter__()
 
 
-def test_source_read_allowed_while_logged_in_but_not_while_cs2_runs():
+def test_logged_in_but_idle_target_is_allowed():
     welcome = gp.encode_welcome([(3, gp.encode_equip_slot_object(ACCT, gp.TEAM_T, 4, 64))])
-    s, _ = _session(FakeGC(welcome), in_use=(True, False), read_only=True)
+    s, _ = _session(FakeGC(welcome), in_use_reason=None)
     with s:
         assert s.read_loadout()[(gp.TEAM_T, 4)] == 64
-    s, _ = _session(FakeGC(welcome), in_use=(True, True), read_only=True)
+
+
+def test_read_only_no_longer_changes_the_in_use_rule():
+    s, _ = _session(FakeGC(), in_use_reason="playing a game on this PC", read_only=True)
     with pytest.raises(AccountInUseError):
         s.__enter__()
+
+
+def test_playing_on_another_device_is_detected_during_hello_without_waiting_full_budget():
+    client = PlayingElsewhereClient()
+    s, _ = _session(FakeGC(answers_hello=False), client=client)
+    s.HELLO_TIMEOUT = 10.0  # would normally retry for a while; must bail out fast
+    s.HELLO_RETRY = 10.0
+    start = time.monotonic()
+    with pytest.raises(AccountInUseError, match="playing on another device"):
+        s.__enter__()
+    assert time.monotonic() - start < 5.0
 
 
 def test_gc_silence_raises_and_still_cleans_up():
@@ -122,8 +158,8 @@ def test_write_loadout_sends_only_differences_and_reads_back():
     s, _ = _session(gc)
     want = gp.resolve_loadout({(gp.TEAM_T, 4): 64, (gp.TEAM_CT, 17): 38})
     with s:
-        matched, total = s.write_loadout(want)
-    assert (matched, total) == (30, 30)
+        matched, total, changed = s.write_loadout(want)
+    assert (matched, total, changed) == (30, 30, 2)
     equip = [body for msg, body in gc.sent if msg == gp.MSG_ADJUST_EQUIP_SLOTS]
     assert len(equip) == 1
     slots = [f for f in gp.iter_fields(equip[0]) if f[0] == 1]
@@ -135,7 +171,7 @@ def test_write_loadout_reports_slots_the_gc_ignored():
     s, _ = _session(gc)
     want = gp.resolve_loadout({(gp.TEAM_T, 4): 64})
     with s:
-        assert s.write_loadout(want) == (29, 30)
+        assert s.write_loadout(want) == (29, 30, 1)
 
 
 def test_profile_and_cooldown():
@@ -161,6 +197,33 @@ def test_past_deadline_raises_gc_unavailable_quickly():
 def test_rejected_token_propagates():
     def logon(_tok, deadline=None):
         raise TokenRejectedError("InvalidPassword")
-    s = Cs2Session(_token(), logon=logon, gc_factory=lambda c: FakeGC(), in_use_probe=lambda sid: (False, False))
+    s = Cs2Session(_token(), logon=logon, gc_factory=lambda c: FakeGC(), in_use_probe=lambda sid: None)
     with pytest.raises(TokenRejectedError):
         s.__enter__()
+
+
+# --- account_in_use ----------------------------------------------------------
+
+def _patch_probe(monkeypatch, *, active=0, running_app=0, names=frozenset()):
+    monkeypatch.setattr(cs2_session, "_steam_registry", lambda: (active, running_app))
+    monkeypatch.setattr(cs2_session, "_process_names", lambda: set(names))
+
+
+def test_account_in_use_idle_is_none(monkeypatch):
+    _patch_probe(monkeypatch, active=ACCT, running_app=0, names={"steam.exe"})
+    assert account_in_use(SID) is None
+
+
+def test_account_in_use_running_app_id_is_a_reason(monkeypatch):
+    _patch_probe(monkeypatch, active=ACCT, running_app=730, names={"steam.exe"})
+    assert account_in_use(SID) == "playing a game on this PC"
+
+
+def test_account_in_use_cs2_process_is_a_reason(monkeypatch):
+    _patch_probe(monkeypatch, active=ACCT, running_app=0, names={"steam.exe", "cs2.exe"})
+    assert account_in_use(SID) == "playing a game on this PC"
+
+
+def test_account_in_use_different_active_user_is_none(monkeypatch):
+    _patch_probe(monkeypatch, active=ACCT + 1, running_app=730, names={"steam.exe", "cs2.exe"})
+    assert account_in_use(SID) is None

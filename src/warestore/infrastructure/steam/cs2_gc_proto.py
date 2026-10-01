@@ -24,6 +24,9 @@ MSG_MM_HELLO = 9109
 MSG_MM_HELLO_REPLY = 9110
 MSG_PROFILE_REQUEST = 9127
 MSG_PROFILE = 9128
+# Sent by Steam (not the GC) when the account starts/stops playing anywhere;
+# ValvePython has no body class for it, so it's decoded here from raw bytes.
+MSG_CLIENT_PLAYING_SESSION_STATE = 9600
 # The GC answers an equip with an ACK of the same id plus SO create/update/destroy/
 # cache-subscribed/update-multiple messages.
 EQUIP_REPLY_MSGS = (MSG_ADJUST_EQUIP_SLOTS, 21, 22, 23, 24, 26)
@@ -233,6 +236,12 @@ def decode_account_profile(buf: bytes) -> GcProfile:
         premier_wins=premier_wins,
         cooldown_seconds=cooldown,
     )
+
+
+def decode_playing_session_state(payload: bytes) -> tuple[bool, int]:
+    """(playing_blocked, playing_app) from a ClientPlayingSessionState payload."""
+    f = {num: v for num, _wt, v in iter_fields(payload)}
+    return bool(f.get(2, 0)), f.get(3, 0)
 
 
 def decode_players_profile(buf: bytes, account_id: int) -> GcProfile | None:
