@@ -154,3 +154,11 @@ def test_source_account_is_marked(_app):
     card.set_view_state(_source_state(False))
     assert not card.is_cs2_source
     assert "loadout source" not in card.toolTip()
+
+
+def test_tooltip_shows_the_cs2_tier(_app):
+    card = _card()
+    card.set_view_state(_state(cs2_level=12, prime=1))
+    assert "Tier" in card.toolTip() and "Premier-ready" in card.toolTip()
+    card.set_view_state(_state(cs2_level=12, prime=-1))
+    assert "Tier" not in card.toolTip()  # unknown until the GC has been asked
