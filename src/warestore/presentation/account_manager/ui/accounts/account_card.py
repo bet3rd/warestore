@@ -833,14 +833,17 @@ class AccountCard(QWidget):
         bright = QColor(accent.current().bright)
         faded = QColor(bright)
         faded.setAlpha(0)
-        gradient = QConicalGradient(ring.center(), self._spin_angle)
+        # Qt angles run counter-clockwise, so a decreasing head angle spins the
+        # arc clockwise; the bright head leads and the tail fades out behind it.
+        head = -self._spin_angle
+        gradient = QConicalGradient(ring.center(), head)
         gradient.setColorAt(0.0, bright)
         gradient.setColorAt(110 / 360, faded)
         gradient.setColorAt(1.0, faded)
         pen = QPen(QBrush(gradient), 2.4)
         pen.setCapStyle(Qt.RoundCap)
         painter.setPen(pen)
-        painter.drawArc(ring, int(self._spin_angle * 16), 110 * 16)
+        painter.drawArc(ring, int(head * 16), 110 * 16)
 
     def _paint_footer(self, painter: QPainter) -> None:
         """One centred line of CS2 data below the divider.
