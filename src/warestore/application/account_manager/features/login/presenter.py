@@ -45,7 +45,7 @@ class LoginPresenter:
             "persona_state": 7,
             "open_cs2": cfg.get("open_cs2", False),
             "cs2_options": cfg.get("cs2_launch_options", ""),
-            "disable_remote_play": cfg.get("disable_remote_play", True),
+            "disable_remote_play": True,  # always: streaming never starts up
             "add_account_only": cfg.get("add_account_only", False),
             "spoof_on_login": cfg.get("spoof_on_login", False),
             # Only a pasted NEW token runs the account check; re-login reuses

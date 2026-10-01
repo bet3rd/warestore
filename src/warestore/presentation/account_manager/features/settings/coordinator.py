@@ -152,11 +152,6 @@ class SettingsCoordinator:
         # change can't take effect, so prompt for a restart.
         self._set_status(f"Interface scale set to {scale}%. Restart WareStore to apply.")
 
-    def on_gcpd_check_toggle(self, checked: bool) -> None:
-        # Takes effect on the next launch; nothing to do right now.
-        self._settings["gcpd_check_on_launch"] = checked
-        self._ctrl.save_settings(self._settings)
-
     def on_exclude_from_capture_toggle(self, checked: bool) -> None:
         self._settings["exclude_from_capture"] = checked
         self._ctrl.save_settings(self._settings)
@@ -173,10 +168,6 @@ class SettingsCoordinator:
 
     def on_cs2_cloud_toggle(self, checked: bool) -> None:
         self._settings["cs2_disable_cloud"] = checked
-        self._ctrl.save_settings(self._settings)
-
-    def on_remote_play_toggle(self, checked: bool) -> None:
-        self._settings["disable_remote_play"] = checked
         self._ctrl.save_settings(self._settings)
 
     def on_add_only_toggle(self, checked: bool) -> None:

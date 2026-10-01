@@ -171,10 +171,6 @@ class MainWindow(QMainWindow):
         self._restore_window_position()
         self._accounts.load_accounts()
         QTimer.singleShot(300, self._settings_coord.check_updates)
-        if self._settings.get("gcpd_check_on_launch"):
-            # Defer so the grid renders first; then run a stats-only check for
-            # every account sequentially (see AccountCoordinator.refresh_all_stats).
-            QTimer.singleShot(800, self._accounts.refresh_all_stats)
 
         self._tray = setup_tray(self)
         self._instance_server = InstanceServer(self)
@@ -221,7 +217,6 @@ class MainWindow(QMainWindow):
         su.cb_cs2.toggled.connect(self._settings_coord.on_cs2_toggle)
         su.le_opts.textChanged.connect(self._settings_coord.on_opts_change)
         su.cb_cs2_cloud.toggled.connect(self._settings_coord.on_cs2_cloud_toggle)
-        su.cb_remote_play.toggled.connect(self._settings_coord.on_remote_play_toggle)
         su.btn_clean_userdata.clicked.connect(self._settings_coord.on_clean_userdata)
         su.cb_add_only.toggled.connect(self._settings_coord.on_add_only_toggle)
         su.cb_spoof.toggled.connect(self._settings_coord.on_spoof_toggle)
@@ -232,9 +227,6 @@ class MainWindow(QMainWindow):
         su.cb_close_to_tray.toggled.connect(self._settings_coord.on_close_to_tray_toggle)
         su.cb_auto_remove_expired.toggled.connect(
             self._settings_coord.on_auto_remove_expired_toggle
-        )
-        su.cb_gcpd_on_launch.toggled.connect(
-            self._settings_coord.on_gcpd_check_toggle
         )
         for cb, key in (
             (su.cb_check_on_add, "account_check_on_add"),
