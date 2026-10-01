@@ -81,47 +81,63 @@ def show_account_card_menu(
     act_relogin = menu.addAction("Re-login with saved token")
     act_relogin.setEnabled(token_available and not multi)
     menu.addSeparator()
-    act_copy_user = menu.addAction("Copy username")
+
+    copy_menu = menu.addMenu("Copy")
+    act_copy_user = copy_menu.addAction("Username")
     act_copy_user.setEnabled(not multi and bool(username))
-    act_copy_friend = menu.addAction("Copy friend code")
+    act_copy_friend = copy_menu.addAction("Friend code")
     act_copy_friend.setEnabled(not multi and bool(friend_code))
-    act_copy = menu.addAction("Copy token")
-    act_copy.setEnabled(token_available and not multi)
-    menu.addSeparator()
-    act_copy_export = menu.addAction(
+    copy_menu.addSeparator()
+    act_copy_export = copy_menu.addAction(
         f"Export {export_count} tokens to clipboard"
         if export_count != 1
         else "Export token to clipboard"
     )
     act_copy_export.setEnabled(export_count > 0)
-    act_export_file = menu.addAction(
+    act_export_file = copy_menu.addAction(
         f"Export {export_count} tokens to file…"
         if export_count != 1
         else "Export token to file…"
     )
     act_export_file.setEnabled(export_count > 0)
-    menu.addSeparator()
+
     act_profile = menu.addAction("Open Steam Profile")
     act_profile.setEnabled(not multi and bool(steam_id))
-    act_refresh_stats = None
-    if on_refresh_stats is not None:
-        act_refresh_stats = menu.addAction(
-            f"Refresh stats ({export_count})" if multi else "Refresh stats"
-        )
-        # One CS2 server session per account (profile + cooldown + GCPD), run
-        # sequentially. Needs at least one target with a saved token
-        # (export_count counts those).
-        act_refresh_stats.setEnabled(export_count > 0)
-
-    act_check = None
-    if on_check is not None:
-        act_check = menu.addAction(
-            f"Check {export_count} accounts" if multi else "Check account"
-        )
-        # One CS2 server session per account; needs a saved token.
-        act_check.setEnabled(export_count > 0)
-
     menu.addSeparator()
+
+    # CS2: server checks (one session per account, needs a saved token —
+    # export_count counts those) and the config/loadout source.
+    act_check = act_refresh_stats = act_cs2_source = act_cs2_apply = None
+    if any(cb is not None for cb in (on_check, on_refresh_stats, on_cs2_source_set, on_cs2_apply)):
+        cs2_menu = menu.addMenu(f"CS2 ({len(targets)})" if multi else "CS2")
+        if on_check is not None:
+            act_check = cs2_menu.addAction(
+                f"Check {export_count} accounts" if multi else "Check account"
+            )
+            act_check.setEnabled(export_count > 0)
+        if on_refresh_stats is not None:
+            act_refresh_stats = cs2_menu.addAction(
+                f"Refresh stats ({export_count})" if multi else "Refresh stats"
+            )
+            act_refresh_stats.setEnabled(export_count > 0)
+        if (act_check or act_refresh_stats) and (on_cs2_source_set or on_cs2_apply):
+            cs2_menu.addSeparator()
+        if on_cs2_source_set is not None:
+            act_cs2_source = cs2_menu.addAction("Set as config source")
+            act_cs2_source.setCheckable(True)
+            act_cs2_source.setChecked(not multi and menu_state.is_cs2_source)
+            # Designating a source is a single-account action.
+            act_cs2_source.setEnabled(not multi and bool(steam_id))
+        if on_cs2_apply is not None:
+            act_cs2_apply = cs2_menu.addAction(
+                f"Override config + loadout ({len(targets)})" if multi
+                else "Override config + loadout"
+            )
+            # Needs a source set, and overriding the source with itself is a no-op.
+            can_override = menu_state.has_cs2_source and not (
+                not multi and menu_state.is_cs2_source
+            )
+            act_cs2_apply.setEnabled(can_override)
 
     color_menu = menu.addMenu(f"Color tag ({len(targets)})" if multi else "Color tag")
     for label, value in COLOR_CHOICES:
@@ -133,28 +149,6 @@ def show_account_card_menu(
             lambda _checked=False, v=value: on_color_set(targets, v)
         )
 
-    act_cs2_source = None
-    act_cs2_apply = None
-    if on_cs2_source_set is not None or on_cs2_apply is not None:
-        cs2_menu = menu.addMenu(f"CS2 Config ({len(targets)})" if multi else "CS2 Config")
-        if on_cs2_source_set is not None:
-            act_cs2_source = cs2_menu.addAction("Set Account as Source")
-            act_cs2_source.setCheckable(True)
-            act_cs2_source.setChecked(not multi and menu_state.is_cs2_source)
-            # Designating a source is a single-account action.
-            act_cs2_source.setEnabled(not multi and bool(steam_id))
-        if on_cs2_apply is not None:
-            act_cs2_apply = cs2_menu.addAction(
-                f"Override Config ({len(targets)})" if multi else "Override Config"
-            )
-            # Needs a source set, and overriding the source with itself is a no-op.
-            can_override = menu_state.has_cs2_source and not (
-                not multi and menu_state.is_cs2_source
-            )
-            act_cs2_apply.setEnabled(can_override)
-
-    menu.addSeparator()
-
     cooldown_menu = menu.addMenu(f"Cooldown ({len(targets)})" if multi else "Cooldown")
     for label, seconds in menu_state.cooldown_presets:
         act = cooldown_menu.addAction(label)
@@ -163,25 +157,18 @@ def show_account_card_menu(
         )
     act_custom = cooldown_menu.addAction("Custom…")
     act_custom.triggered.connect(lambda _checked=False: on_cooldown_custom(targets))
-    if menu_state.has_cooldown and not multi:
-        cooldown_menu.addSeparator()
-        act_clear = cooldown_menu.addAction("Clear cooldown")
-        act_clear.triggered.connect(lambda _checked=False: on_cooldown_set(targets, 0))
-    elif multi:
+    if multi or menu_state.has_cooldown:
         cooldown_menu.addSeparator()
         act_clear = cooldown_menu.addAction("Clear cooldown")
         act_clear.triggered.connect(lambda _checked=False: on_cooldown_set(targets, 0))
 
+    menu.addSeparator()
+    act_reset_hwid = None
     if on_reset_hwid and not multi:
-        menu.addSeparator()
         act_reset_hwid = menu.addAction(
             "Reset HWID" if has_hwid_profile else "Reset HWID (no profile)"
         )
         act_reset_hwid.setEnabled(has_hwid_profile)
-    else:
-        act_reset_hwid = None
-
-    menu.addSeparator()
     act_delete = menu.addAction(
         f"Delete {len(targets)} accounts" if multi else "Delete account"
     )
@@ -195,10 +182,6 @@ def show_account_card_menu(
         QApplication.clipboard().setText(username)
     elif chosen == act_copy_friend and friend_code and not multi:
         QApplication.clipboard().setText(friend_code)
-    elif chosen == act_copy and token_available and not multi:
-        token = menu_state.saved_token
-        if token:
-            QApplication.clipboard().setText(token)
     elif chosen == act_copy_export and export_count > 0:
         on_copy_export(targets)
     elif chosen == act_export_file and export_count > 0:
