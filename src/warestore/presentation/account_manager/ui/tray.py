@@ -36,9 +36,9 @@ def notify_cooldown_finished(
         logger.info(f"Cooldown finished: {name}")
 
 
-def notify_hidden_to_tray(tray: QSystemTrayIcon) -> None:
+def notify_hidden_to_tray(tray: QSystemTrayIcon, *, notify: bool = True) -> None:
     tray.setToolTip(_TRAY_TOOLTIP_HIDDEN)
-    if QSystemTrayIcon.supportsMessages():
+    if notify and QSystemTrayIcon.supportsMessages():
         tray.showMessage(
             "WareStore",
             "Minimized to tray — still running. Use the tray icon to open.",

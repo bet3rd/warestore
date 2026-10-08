@@ -20,6 +20,14 @@ from warestore.presentation.account_manager.ui.theme.capture import (
     schedule_capture_exclusion_for_widget,
     set_window_capture_exclusion,
 )
+from warestore.presentation.account_manager.ui.theme.taskbar import (
+    TASKBAR_HIDE,
+    TASKBAR_HIDE_ALT_TAB,
+    TASKBAR_SHOW,
+    normalize_taskbar_mode,
+    schedule_taskbar_mode_for_widget,
+    taskbar_mode_available,
+)
 
 __all__ = [
     "QSS",
@@ -37,4 +45,10 @@ __all__ = [
     "install_capture_exclusion_popup_filter",
     "schedule_capture_exclusion_for_widget",
     "set_window_capture_exclusion",
+    "TASKBAR_HIDE",
+    "TASKBAR_HIDE_ALT_TAB",
+    "TASKBAR_SHOW",
+    "normalize_taskbar_mode",
+    "schedule_taskbar_mode_for_widget",
+    "taskbar_mode_available",
 ]

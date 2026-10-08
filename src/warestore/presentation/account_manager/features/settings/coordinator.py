@@ -64,6 +64,7 @@ class SettingsCoordinator:
         set_log_visible: Callable[[bool], None],
         toggle_settings_open: Callable[[], None],
         apply_capture_exclusion: Callable[[], None],
+        apply_taskbar_mode: Callable[[], None],
         refresh_accent: Callable[[], None],
     ) -> None:
         self._parent = parent
@@ -78,6 +79,7 @@ class SettingsCoordinator:
         self._set_log_visible = set_log_visible
         self._toggle_settings = toggle_settings_open
         self._apply_capture_exclusion = apply_capture_exclusion
+        self._apply_taskbar_mode = apply_taskbar_mode
         self._refresh_accent = refresh_accent
         self._bulk_worker: BulkImportWorker | None = None
         self._bulk_rejected_count = 0
@@ -156,6 +158,14 @@ class SettingsCoordinator:
         self._settings["exclude_from_capture"] = checked
         self._ctrl.save_settings(self._settings)
         self._apply_capture_exclusion()
+
+    def on_taskbar_mode_change(self, _index: int) -> None:
+        mode = self._ui.cmb_taskbar.currentData()
+        if mode is None:
+            return
+        self._settings["taskbar_mode"] = mode
+        self._ctrl.save_settings(self._settings)
+        self._apply_taskbar_mode()
 
     def on_cs2_toggle(self, checked: bool) -> None:
         self._settings["open_cs2"] = checked

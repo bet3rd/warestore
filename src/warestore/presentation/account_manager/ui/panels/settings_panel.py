@@ -22,7 +22,13 @@ from warestore.presentation.account_manager.ui.chrome import HeaderBar, RoundedP
 from warestore.presentation.account_manager.ui.color_picker import ColorSwatch
 from warestore.presentation.account_manager.ui.scroll_fade import attach_bottom_fade
 from warestore.presentation.account_manager.ui.section import SectionLabel
-from warestore.presentation.account_manager.ui.theme import accent
+from warestore.presentation.account_manager.ui.theme import (
+    TASKBAR_HIDE,
+    TASKBAR_HIDE_ALT_TAB,
+    TASKBAR_SHOW,
+    accent,
+    normalize_taskbar_mode,
+)
 from warestore.presentation.account_manager.ui.theme.accent import (
     ACCENT_PRESETS,
     DEFAULT_ACCENT,
@@ -70,6 +76,7 @@ class SettingsPanel:
         self.cb_close_to_tray = QCheckBox("Close to tray (X hides window)")
         self.cb_auto_remove_expired = QCheckBox("Remove expired tokens on refresh")
         self.cb_exclude_capture = QCheckBox("Hide from screen capture (Discord, OBS)")
+        self.cmb_taskbar = QComboBox()
         self.cmb_dpi = QComboBox()
         self.accent_swatches = [ColorSwatch(hx, name) for name, hx in ACCENT_PRESETS]
         self.accent_custom_swatch = ColorSwatch(DEFAULT_ACCENT, "Custom")
@@ -259,6 +266,30 @@ class SettingsPanel:
             self.cb_exclude_capture.setEnabled(False)
             self.cb_exclude_capture.setToolTip("Windows only.")
         layout.addWidget(self.cb_exclude_capture)
+
+        taskbar_row = QHBoxLayout()
+        taskbar_row.setContentsMargins(0, 0, 0, 0)
+        taskbar_row.addWidget(QLabel("Taskbar icon"))
+        taskbar_row.addStretch()
+        for label, mode in (
+            ("Show", TASKBAR_SHOW),
+            ("Hide", TASKBAR_HIDE),
+            ("Hide + Alt-Tab", TASKBAR_HIDE_ALT_TAB),
+        ):
+            self.cmb_taskbar.addItem(label, mode)
+        idx = self.cmb_taskbar.findData(normalize_taskbar_mode(self._settings.get("taskbar_mode")))
+        self.cmb_taskbar.setCurrentIndex(max(idx, 0))
+        self.cmb_taskbar.setFixedWidth(132)
+        self.cmb_taskbar.setToolTip(
+            "Hide: no taskbar button; still in Alt-Tab.\n"
+            "Hide + Alt-Tab: also left out of Alt-Tab.\n"
+            "Open it from the tray icon. Minimizing sends it to the tray."
+        )
+        if sys.platform != "win32":
+            self.cmb_taskbar.setEnabled(False)
+            self.cmb_taskbar.setToolTip("Windows only.")
+        taskbar_row.addWidget(self.cmb_taskbar)
+        layout.addLayout(taskbar_row)
 
         layout = _outer_layout
         layout.addWidget(startup_box)

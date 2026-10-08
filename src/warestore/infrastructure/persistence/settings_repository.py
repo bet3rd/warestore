@@ -24,6 +24,7 @@ class SettingsRepository:
         "account_check_stats": True,
         "account_check_workshop": True,
         "exclude_from_capture": True,
+        "taskbar_mode": "show",
         "dpi_scale": 100,
         "accent_color": "#880808",
         "steam_api_key": "",

@@ -24,11 +24,14 @@ from warestore.presentation.account_manager.support.window_position import title
 from warestore.presentation.account_manager.ui.chrome import RoundedPanel as _RoundedPanel
 from warestore.presentation.account_manager.ui.panels import MainPanel, SettingsPanel
 from warestore.presentation.account_manager.ui.theme import (
+    TASKBAR_SHOW,
     app_icon,
     enable_dark_title_bar,
     handle_style_changing_layered_hook,
     install_capture_exclusion_popup_filter,
+    normalize_taskbar_mode,
     schedule_capture_exclusion_for_widget,
+    schedule_taskbar_mode_for_widget,
 )
 from warestore.presentation.account_manager.ui.tray import (
     notify_hidden_to_tray,
@@ -152,6 +155,7 @@ class MainWindow(QMainWindow):
             set_log_visible=self._ui.set_log_visible,
             toggle_settings_open=self._open_settings,
             apply_capture_exclusion=self.apply_capture_exclusion,
+            apply_taskbar_mode=self.apply_taskbar_mode,
             refresh_accent=self._ui.refresh_accent,
         )
         self._cooldowns = CooldownCoordinator(
@@ -185,6 +189,12 @@ class MainWindow(QMainWindow):
             self._settings_ui.cb_close_to_tray.setToolTip(
                 "System tray unavailable — X will always quit the app."
             )
+            # No tray means no way back to a window without a taskbar button.
+            self._settings_ui.cmb_taskbar.setEnabled(False)
+            self._settings_ui.cmb_taskbar.setToolTip(
+                "System tray unavailable — the taskbar icon stays visible."
+            )
+        self.apply_taskbar_mode()
 
     def _wire_panels(self) -> None:
         ui = self._ui
@@ -245,6 +255,7 @@ class MainWindow(QMainWindow):
         su.cb_exclude_capture.toggled.connect(
             self._settings_coord.on_exclude_from_capture_toggle
         )
+        su.cmb_taskbar.currentIndexChanged.connect(self._settings_coord.on_taskbar_mode_change)
         su.txt_bulk.textChanged.connect(self._settings_coord.on_bulk_text_change)
         su.txt_bulk.bulk_changed.connect(self._settings_coord.on_bulk_text_change)
         su.btn_browse.clicked.connect(self._settings_coord.on_browse_file)
@@ -313,11 +324,25 @@ class MainWindow(QMainWindow):
         self._settings_open = False
         self._right.hide()
 
-    def _hide_to_tray(self) -> None:
+    def _hide_to_tray(self, *, notify: bool = True) -> None:
         self._close_settings_panel()
         self.hide()
         if self._tray is not None:
-            notify_hidden_to_tray(self._tray)
+            notify_hidden_to_tray(self._tray, notify=notify)
+
+    def _taskbar_mode(self) -> str:
+        if self._tray is None:
+            return TASKBAR_SHOW
+        return normalize_taskbar_mode(self._settings.get("taskbar_mode"))
+
+    def _minimize_to_tray(self) -> None:
+        """With no taskbar button a minimized window would sit as a stub above
+        the taskbar, so minimizing hides to the tray instead."""
+        if not (self.windowState() & Qt.WindowMinimized):
+            return
+        self._hide_to_tray(notify=False)
+        # Cleared while hidden so the tray's show() brings it back restored.
+        self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
 
     def _on_close_requested(self) -> None:
         self._save_window_position()
@@ -396,6 +421,8 @@ class MainWindow(QMainWindow):
             self,
             enabled=bool(self._settings.get("exclude_from_capture", True)),
         )
+        # Qt resets the window's owner on every show, which brings the button back.
+        self.apply_taskbar_mode()
         if self._tray is not None:
             restore_tray_tooltip(self._tray)
         super().showEvent(event)
@@ -403,6 +430,13 @@ class MainWindow(QMainWindow):
     def changeEvent(self, event):
         if event.type() == QEvent.WinIdChange:
             QTimer.singleShot(0, self.apply_capture_exclusion)
+            QTimer.singleShot(0, self.apply_taskbar_mode)
+        elif (
+            event.type() == QEvent.WindowStateChange
+            and self.windowState() & Qt.WindowMinimized
+            and self._taskbar_mode() != TASKBAR_SHOW
+        ):
+            QTimer.singleShot(0, self._minimize_to_tray)
         super().changeEvent(event)
 
     def apply_capture_exclusion(self) -> None:
@@ -410,6 +444,9 @@ class MainWindow(QMainWindow):
             self,
             enabled=bool(self._settings.get("exclude_from_capture", True)),
         )
+
+    def apply_taskbar_mode(self) -> None:
+        schedule_taskbar_mode_for_widget(self, mode=self._taskbar_mode())
 
     def closeEvent(self, event):
         if self._close_to_tray_enabled():
